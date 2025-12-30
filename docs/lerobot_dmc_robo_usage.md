@@ -36,6 +36,12 @@ If your environment uses a Zenoh config file instead of direct endpoints, pass:
 --robot.zenoh_config_path path/to/zenoh_remote.json5
 ```
 
+If IMU payload uses root-level `gx/gy/gz`, pass:
+
+```
+--robot.imu_field_path .
+```
+
 ## References
 
 - `docs/remote_zenoh_tool.py` for Zenoh publish/subscribe examples.

@@ -31,7 +31,8 @@ pip install -e packages/lerobot_teleoperator_dmc_robo
 ```
 python -m lerobot_robot_dmc_robo.smoke_test \
   --robot-id <ROBOT_ID> \
-  --connect tcp/<ROUTER_IP>:7447
+  --connect tcp/<ROUTER_IP>:7447 \
+  --imu-field-path .
 ```
 
 Expected logs:
@@ -43,6 +44,12 @@ Expected logs:
 ```
 lerobot-teleoperate --robot.type=dmc_robo --robot.robot_id <ROBOT_ID> --robot.connect tcp/<ROUTER_IP>:7447
 lerobot-record --robot.type=dmc_robo --robot.robot_id <ROBOT_ID> --robot.connect tcp/<ROUTER_IP>:7447
+```
+
+If IMU payload uses root-level `gx/gy/gz`, pass:
+
+```
+--robot.imu_field_path .
 ```
 
 ## Notes

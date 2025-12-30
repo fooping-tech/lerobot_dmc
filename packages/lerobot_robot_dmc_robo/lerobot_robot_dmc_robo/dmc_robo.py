@@ -55,7 +55,7 @@ def _build_zenoh_config(config: DmcRoboConfig) -> Any:
 
 def _get_by_path(obj: Any, path: str) -> Any:
     cur = obj
-    if not path:
+    if not path or path in {".", "<root>"}:
         return cur
     for part in path.split("."):
         if isinstance(cur, dict):

@@ -16,6 +16,13 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--camera-height", type=int, default=480)
     parser.add_argument("--camera-width", type=int, default=640)
     parser.add_argument("--deadman-ms", type=int, default=300)
+    parser.add_argument(
+        "--imu-field-path",
+        "--robot.imu_field_path",
+        dest="imu_field_path",
+        type=str,
+        default=None,
+    )
     parser.add_argument("--timeout-s", type=float, default=10.0)
     return parser.parse_args()
 
@@ -30,6 +37,7 @@ def main() -> int:
         camera_height=args.camera_height,
         camera_width=args.camera_width,
         deadman_ms=args.deadman_ms,
+        imu_field_path=args.imu_field_path,
     )
 
     robot = DmcRobo(config)
