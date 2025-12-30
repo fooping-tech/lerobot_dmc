@@ -9,6 +9,8 @@ This repository contains two installable plugins:
 
 ## Quick Start
 
+Python 3.10+ is required.
+
 Create a local virtual environment (optional but recommended):  
 
 ```
