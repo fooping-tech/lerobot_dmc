@@ -23,6 +23,7 @@ def _parse_args() -> argparse.Namespace:
         type=str,
         default=None,
     )
+    parser.add_argument("--wait-lidar", action="store_true", help="wait for lidar scan before exiting")
     parser.add_argument("--timeout-s", type=float, default=10.0)
     return parser.parse_args()
 
@@ -57,8 +58,26 @@ def main() -> int:
 
         image = obs["camera"]
         imu = obs["imu.gyro"]
+        lidar_points = obs.get("lidar.points", [])
+        lidar_seq = obs.get("lidar.seq")
+        lidar_ts = obs.get("lidar.ts_ms")
         print(f"decoded image shape={image.shape} dtype={image.dtype}")
         print(f"imu gyro={imu}")
+        print(f"lidar points={len(lidar_points)} seq={lidar_seq} ts_ms={lidar_ts}")
+
+        if args.wait_lidar and len(lidar_points) == 0:
+            deadline = time.monotonic() + args.timeout_s
+            while True:
+                if time.monotonic() > deadline:
+                    raise TimeoutError("timed out waiting for lidar scan")
+                obs = robot.get_observation()
+                lidar_points = obs.get("lidar.points", [])
+                if len(lidar_points) > 0:
+                    lidar_seq = obs.get("lidar.seq")
+                    lidar_ts = obs.get("lidar.ts_ms")
+                    print(f"lidar points={len(lidar_points)} seq={lidar_seq} ts_ms={lidar_ts}")
+                    break
+                time.sleep(0.1)
     finally:
         try:
             robot.send_action({"v_l": 0.0, "v_r": 0.0})

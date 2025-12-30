@@ -35,6 +35,12 @@ python -m lerobot_robot_dmc_robo.smoke_test \
   --imu-field-path .
 ```
 
+To wait for a LiDAR scan as well:
+
+```
+--wait-lidar
+```
+
 Expected logs:
 - "zenoh session opened"
 - "decoded image shape=(H,W,3)"
