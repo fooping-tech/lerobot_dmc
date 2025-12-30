@@ -9,6 +9,14 @@ This repository contains two installable plugins:
 
 ## Quick Start
 
+Create a local virtual environment (optional but recommended):  
+
+```
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -U pip
+```
+
 Install both plugins in editable mode:
 
 ```
