@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lerobot_robot_dmc_robo"
+version = "0.0.0"
+description = "LeRobot robot plugin for Zenoh-based dmc_robo devices."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+dependencies = [
+  "lerobot",
+  "eclipse-zenoh",
+  "numpy",
+  "Pillow",
+]
+
+[tool.setuptools]
+packages = ["lerobot_robot_dmc_robo"]

@@ -1,0 +1,8 @@
+// Example config for a remote PC to connect to a Zenoh router.
+// Replace <ROUTER_IP> with your router's IP address.
+{
+  mode: "peer",
+  connect: {
+    endpoints: ["tcp/<ROUTER_IP>:7447"]
+  }
+}
