@@ -598,7 +598,7 @@ class MainWindow:
         self._lbl_status.setFrameStyle(QFrame.Panel | QFrame.Sunken)
         conn_form.addRow("status", self._lbl_status)
         self._lbl_keys = QLabel(
-            "motor: left r/f, right u/j, arrows (release to stop)\n"
+            "motor: w=fwd, s/x=back, a=left, d=right, q/e/z/c=diag (release to stop)\n"
             "note: key capture disabled while typing in text fields"
         )
         conn_form.addRow("keys", self._lbl_keys)
@@ -873,14 +873,19 @@ class MainWindow:
         ev = event  # QKeyEvent
         key = ev.key()
         if key not in (
+            self._Qt.Key_W,
+            self._Qt.Key_A,
+            self._Qt.Key_S,
+            self._Qt.Key_X,
+            self._Qt.Key_D,
+            self._Qt.Key_Q,
+            self._Qt.Key_E,
+            self._Qt.Key_Z,
+            self._Qt.Key_C,
             self._Qt.Key_R,
             self._Qt.Key_F,
             self._Qt.Key_U,
             self._Qt.Key_J,
-            self._Qt.Key_Up,
-            self._Qt.Key_Down,
-            self._Qt.Key_Left,
-            self._Qt.Key_Right,
         ):
             return False
 
@@ -904,23 +909,26 @@ class MainWindow:
     def _desired_motor(self) -> tuple[float, float]:
         step = float(self._spin_step.value())
 
-        # Arrow-key driving (combined command) takes priority over per-wheel keys.
-        up = self._Qt.Key_Up in self._pressed
-        right = self._Qt.Key_Right in self._pressed
-        left = self._Qt.Key_Left in self._pressed
-        down = self._Qt.Key_Down in self._pressed
+        # WASD-style driving takes priority over per-wheel keys.
+        if self._Qt.Key_Q in self._pressed:
+            return step * 0.5, step
+        if self._Qt.Key_E in self._pressed:
+            return step, step * 0.5
+        if self._Qt.Key_Z in self._pressed:
+            return -step * 0.5, -step
+        if self._Qt.Key_C in self._pressed:
+            return -step, -step * 0.5
 
-        # When moving forward, allow "add turn" by pressing left/right:
-        # - Up + Right => right wheel is 0.5x (gentle right)
-        # - Up + Left  => left wheel is 0.5x (gentle left)
+        up = self._Qt.Key_W in self._pressed
+        down = (self._Qt.Key_S in self._pressed) or (self._Qt.Key_X in self._pressed)
+        left = self._Qt.Key_A in self._pressed
+        right = self._Qt.Key_D in self._pressed
+
         if up and right and not left:
             return step, step * 0.5
         if up and left and not right:
             return step * 0.5, step
 
-        # When moving backward, allow "add turn" by pressing left/right:
-        # - Down + Right => right wheel is 0.5x (gentle right while reversing)
-        # - Down + Left  => left wheel is 0.5x (gentle left while reversing)
         if down and right and not left:
             return -step, -step * 0.5
         if down and left and not right:
@@ -930,9 +938,9 @@ class MainWindow:
             return step, step
         if down:
             return -step, -step
-        if self._Qt.Key_Left in self._pressed:
+        if left:
             return -step * 0.3, step * 0.3
-        if self._Qt.Key_Right in self._pressed:
+        if right:
             return step * 0.3, -step * 0.3
 
         left = 0.0

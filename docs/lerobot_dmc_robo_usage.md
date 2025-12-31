@@ -36,6 +36,22 @@ Teleop with GUI viewer (camera + LiDAR + IMU charts):
 lerobot-teleoperate --teleop.type=dmc_robo_teleop --robot.type=dmc_robo --robot.robot_id <ROBOT_ID> --robot.connect tcp/<ROUTER_IP>:7447
 ```
 
+Recording example (dataset fields are required):
+
+```
+lerobot-record \
+  --teleop.discover_packages_path=lerobot_teleoperator_dmc_robo \
+  --robot.discover_packages_path=lerobot_robot_dmc_robo \
+  --teleop.type=dmc_robo_teleop \
+  --robot.type=dmc_robo \
+  --robot.robot_id rasp-zero-01 \
+  --robot.zenoh_config_path zenoh_remote.json5 \
+  --robot.imu_field_path . \
+  --dataset.repo_id <DATASET_NAME> \
+  --dataset.single_task <TASK_NAME> \
+  --dataset.fps 10
+```
+
 If your environment uses a Zenoh config file instead of direct endpoints, pass:
 
 ```

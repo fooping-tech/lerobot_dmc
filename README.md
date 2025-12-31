@@ -65,6 +65,13 @@ Disable it if needed:
 --teleop.viewer.enabled false
 ```
 
+Teleop keys (GUI):
+- `w`: forward, `s`/`x`: backward
+- `a`: left rotate, `d`: right rotate
+- `q`/`e`/`z`/`c`: diagonals (forward/back + left/right)
+- `r`/`f` + `u`/`j`: per-wheel control (lower priority than WASD)
+Full details: `docs/remote_ui.md`.
+
 Full example with plugin discovery and Zenoh config:
 
 ```
@@ -77,6 +84,22 @@ lerobot-teleoperate \
   --robot.zenoh_config_path zenoh_remote.json5 \
   --robot.imu_field_path . \
   --fps 10
+```
+
+Recording example (note the dataset FPS flag):
+
+```
+lerobot-record \
+  --teleop.discover_packages_path=lerobot_teleoperator_dmc_robo \
+  --robot.discover_packages_path=lerobot_robot_dmc_robo \
+  --teleop.type=dmc_robo_teleop \
+  --robot.type=dmc_robo \
+  --robot.robot_id rasp-zero-01 \
+  --robot.zenoh_config_path zenoh_remote.json5 \
+  --robot.imu_field_path . \
+  --dataset.repo_id <DATASET_NAME> \
+  --dataset.single_task <TASK_NAME> \
+  --dataset.fps 10
 ```
 
 If IMU payload uses root-level `gx/gy/gz`, pass:

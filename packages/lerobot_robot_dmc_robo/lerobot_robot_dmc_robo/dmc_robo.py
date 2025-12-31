@@ -6,6 +6,7 @@ import time
 from functools import cached_property
 from io import BytesIO
 from threading import Lock
+from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
@@ -222,6 +223,9 @@ class DmcRobo(Robot):
     def __init__(self, config: DmcRoboConfig):
         super().__init__(config)
         self.config = config
+        self.cameras = {
+            "camera": SimpleNamespace(height=self.config.camera_height, width=self.config.camera_width)
+        }
         self._session: Any | None = None
         self._pub_motor: Any | None = None
         self._sub_cam: Any | None = None
@@ -246,7 +250,9 @@ class DmcRobo(Robot):
     def observation_features(self) -> dict:
         return {
             "camera": (self.config.camera_height, self.config.camera_width, 3),
-            "imu.gyro": (3,),
+            "imu.gyro.x": float,
+            "imu.gyro.y": float,
+            "imu.gyro.z": float,
             "lidar.points": list,
             "lidar.seq": int,
             "lidar.ts_ms": int,
@@ -431,7 +437,9 @@ class DmcRobo(Robot):
 
         return {
             "camera": image,
-            "imu.gyro": imu,
+            "imu.gyro.x": float(imu[0]),
+            "imu.gyro.y": float(imu[1]),
+            "imu.gyro.z": float(imu[2]),
             "lidar.points": lidar_points,
             "lidar.seq": int(lidar_seq),
             "lidar.ts_ms": int(lidar_ts_ms),

@@ -57,7 +57,11 @@ def main() -> int:
                 time.sleep(0.1)
 
         image = obs["camera"]
-        imu = obs["imu.gyro"]
+        imu = (
+            obs.get("imu.gyro.x", 0.0),
+            obs.get("imu.gyro.y", 0.0),
+            obs.get("imu.gyro.z", 0.0),
+        )
         lidar_points = obs.get("lidar.points", [])
         lidar_seq = obs.get("lidar.seq")
         lidar_ts = obs.get("lidar.ts_ms")
