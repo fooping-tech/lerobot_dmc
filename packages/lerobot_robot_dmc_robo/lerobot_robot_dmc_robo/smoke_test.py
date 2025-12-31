@@ -61,9 +61,17 @@ def main() -> int:
         lidar_points = obs.get("lidar.points", [])
         lidar_seq = obs.get("lidar.seq")
         lidar_ts = obs.get("lidar.ts_ms")
+        motor_cmd_ts = obs.get("motor.cmd_ts_ms")
+        motor_cmd_seq = obs.get("motor.cmd_seq")
+        motor_pw_l = obs.get("motor.pw_l")
+        motor_pw_r = obs.get("motor.pw_r")
         print(f"decoded image shape={image.shape} dtype={image.dtype}")
         print(f"imu gyro={imu}")
         print(f"lidar points={len(lidar_points)} seq={lidar_seq} ts_ms={lidar_ts}")
+        print(
+            "motor telemetry: "
+            f"cmd_ts_ms={motor_cmd_ts} cmd_seq={motor_cmd_seq} pw_l={motor_pw_l} pw_r={motor_pw_r}"
+        )
 
         if args.wait_lidar and len(lidar_points) == 0:
             deadline = time.monotonic() + args.timeout_s

@@ -15,8 +15,11 @@
 ### motor
 
 - Subscribe: `dmc_robo/<robot_id>/motor/cmd`
-- 実装: `src/dmc_ai_mobility/zenoh/keys.py` の `motor_cmd()`
+- Publish: `dmc_robo/<robot_id>/motor/telemetry`
+- 実装: `src/dmc_ai_mobility/zenoh/keys.py` の `motor_cmd()` / `motor_telemetry()`
 - payload: JSON（UTF-8 bytes）
+
+#### motor/cmd
 
 JSON schema:
 
@@ -39,6 +42,40 @@ JSON schema:
 
 備考:
 - `deadman_ms` はノード側でも `config.toml` の `[motor].deadman_ms` を既定値として持ちますが、payload の `deadman_ms` が来た場合はそちらが優先されます。
+
+#### motor/telemetry
+
+- 実装: `src/dmc_ai_mobility/zenoh/keys.py` の `motor_telemetry()`
+- payload: JSON（UTF-8 bytes）
+
+JSON schema:
+
+    {
+      "pw_l": 1500,
+      "pw_r": 1500,
+      "pw_l_raw": 1520,
+      "pw_r_raw": 1480,
+      "cmd_v_l": 0.10,
+      "cmd_v_r": 0.12,
+      "cmd_unit": "mps",
+      "cmd_deadman_ms": 300,
+      "cmd_seq": 184,
+      "cmd_ts_ms": 1735467890123,
+      "ts_ms": 1735467890124
+    }
+
+フィールド:
+- `pw_l` / `pw_r` (int): 出力中のパルス幅（deadband 適用後）
+- `pw_l_raw` / `pw_r_raw` (int): 変換後パルス幅（clamp 前）
+- `cmd_v_l` / `cmd_v_r` (number|null): 最新の速度指令
+- `cmd_unit` (string|null): 速度単位（既定: `"mps"`）
+- `cmd_deadman_ms` (int|null): 指令に含まれる deadman 値
+- `cmd_seq` (int|null): 送信側のシーケンス番号
+- `cmd_ts_ms` (int|null): 送信側タイムスタンプ（epoch ms）
+- `ts_ms` (int): 送信側タイムスタンプ（epoch ms）
+
+備考:
+- `cmd_*` 系は初回指令が来るまで `null` になることがあります。
 
 ### imu
 

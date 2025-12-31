@@ -19,6 +19,7 @@ class DmcRoboConfig(RobotConfig):
     camera_width: int = 640
     camera_wait_timeout_s: float = 5.0
     camera_allow_missing: bool = False
+    motor_telemetry_enabled: bool = True
     imu_field_path: str | None = None
 
     max_speed_mps: float | None = 1.0

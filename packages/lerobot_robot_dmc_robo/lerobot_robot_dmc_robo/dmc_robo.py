@@ -100,6 +100,73 @@ def _autodetect_vec3(payload: Any) -> tuple[str | None, tuple[float, float, floa
     return None, None
 
 
+def _coerce_int(value: Any, default: int) -> int:
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, (int, float)):
+        try:
+            return int(value)
+        except Exception:
+            return default
+    return default
+
+
+def _coerce_float(value: Any, default: float) -> float:
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, (int, float)):
+        try:
+            return float(value)
+        except Exception:
+            return default
+    return default
+
+
+def _coerce_str(value: Any, default: str) -> str:
+    if isinstance(value, str):
+        return value
+    return default
+
+
+def _default_motor_telemetry() -> dict[str, Any]:
+    return {
+        "motor.pw_l": 0,
+        "motor.pw_r": 0,
+        "motor.pw_l_raw": 0,
+        "motor.pw_r_raw": 0,
+        "motor.cmd_v_l": 0.0,
+        "motor.cmd_v_r": 0.0,
+        "motor.cmd_unit": "",
+        "motor.cmd_deadman_ms": -1,
+        "motor.cmd_seq": -1,
+        "motor.cmd_ts_ms": -1,
+        "motor.ts_ms": -1,
+    }
+
+
+def _normalize_motor_telemetry(payload: Any) -> dict[str, Any]:
+    base = _default_motor_telemetry()
+    if not isinstance(payload, dict):
+        return base
+
+    base["motor.pw_l"] = _coerce_int(payload.get("pw_l"), base["motor.pw_l"])
+    base["motor.pw_r"] = _coerce_int(payload.get("pw_r"), base["motor.pw_r"])
+    base["motor.pw_l_raw"] = _coerce_int(payload.get("pw_l_raw"), base["motor.pw_l_raw"])
+    base["motor.pw_r_raw"] = _coerce_int(payload.get("pw_r_raw"), base["motor.pw_r_raw"])
+
+    base["motor.cmd_v_l"] = _coerce_float(payload.get("cmd_v_l"), base["motor.cmd_v_l"])
+    base["motor.cmd_v_r"] = _coerce_float(payload.get("cmd_v_r"), base["motor.cmd_v_r"])
+    base["motor.cmd_unit"] = _coerce_str(payload.get("cmd_unit"), base["motor.cmd_unit"])
+    base["motor.cmd_deadman_ms"] = _coerce_int(
+        payload.get("cmd_deadman_ms"), base["motor.cmd_deadman_ms"]
+    )
+    base["motor.cmd_seq"] = _coerce_int(payload.get("cmd_seq"), base["motor.cmd_seq"])
+    base["motor.cmd_ts_ms"] = _coerce_int(payload.get("cmd_ts_ms"), base["motor.cmd_ts_ms"])
+    base["motor.ts_ms"] = _coerce_int(payload.get("ts_ms"), base["motor.ts_ms"])
+
+    return base
+
+
 def _extract_lidar_points(
     payload: Any,
 ) -> tuple[int | None, int | None, list[tuple[float, float, float | None]]]:
@@ -160,6 +227,7 @@ class DmcRobo(Robot):
         self._sub_cam: Any | None = None
         self._sub_imu: Any | None = None
         self._sub_lidar: Any | None = None
+        self._sub_motor_telemetry: Any | None = None
 
         self._lock = Lock()
         self._last_image: np.ndarray | None = None
@@ -167,6 +235,7 @@ class DmcRobo(Robot):
         self._last_lidar_points: list[tuple[float, float, float | None]] = []
         self._last_lidar_seq: int = -1
         self._last_lidar_ts_ms: int = -1
+        self._last_motor_telemetry: dict[str, Any] = _default_motor_telemetry()
         self._auto_imu_path: str | None = None
         self._warned_camera_shape = False
         self._warned_camera_missing = False
@@ -181,6 +250,17 @@ class DmcRobo(Robot):
             "lidar.points": list,
             "lidar.seq": int,
             "lidar.ts_ms": int,
+            "motor.pw_l": int,
+            "motor.pw_r": int,
+            "motor.pw_l_raw": int,
+            "motor.pw_r_raw": int,
+            "motor.cmd_v_l": float,
+            "motor.cmd_v_r": float,
+            "motor.cmd_unit": str,
+            "motor.cmd_deadman_ms": int,
+            "motor.cmd_seq": int,
+            "motor.cmd_ts_ms": int,
+            "motor.ts_ms": int,
         }
 
     @cached_property
@@ -279,6 +359,20 @@ class DmcRobo(Robot):
         self._sub_cam = session.declare_subscriber(_key(robot_id, "camera/image/jpeg"), on_cam)
         self._sub_imu = session.declare_subscriber(_key(robot_id, "imu/state"), on_imu)
         self._sub_lidar = session.declare_subscriber(_key(robot_id, "lidar/scan"), on_lidar)
+        if self.config.motor_telemetry_enabled:
+            def on_motor_telemetry(sample: Any) -> None:
+                try:
+                    payload = json.loads(sample.payload.to_bytes().decode("utf-8"))
+                except Exception as e:
+                    logger.warning("motor telemetry json decode failed: %s", e)
+                    return
+                telemetry = _normalize_motor_telemetry(payload)
+                with self._lock:
+                    self._last_motor_telemetry = telemetry
+
+            self._sub_motor_telemetry = session.declare_subscriber(
+                _key(robot_id, "motor/telemetry"), on_motor_telemetry
+            )
 
         self._session = session
         self.configure()
@@ -304,6 +398,7 @@ class DmcRobo(Robot):
         lidar_points: list[tuple[float, float, float | None]] = []
         lidar_seq = -1
         lidar_ts_ms = -1
+        motor_telemetry: dict[str, Any] = _default_motor_telemetry()
 
         while True:
             with self._lock:
@@ -312,6 +407,7 @@ class DmcRobo(Robot):
                 lidar_points = list(self._last_lidar_points)
                 lidar_seq = self._last_lidar_seq
                 lidar_ts_ms = self._last_lidar_ts_ms
+                motor_telemetry = dict(self._last_motor_telemetry)
 
             if image is not None:
                 break
@@ -339,6 +435,7 @@ class DmcRobo(Robot):
             "lidar.points": lidar_points,
             "lidar.seq": int(lidar_seq),
             "lidar.ts_ms": int(lidar_ts_ms),
+            **motor_telemetry,
         }
 
     def send_action(self, action: dict[str, Any]) -> dict[str, Any]:
@@ -402,6 +499,13 @@ class DmcRobo(Robot):
             except Exception:
                 pass
             self._sub_lidar = None
+
+        if self._sub_motor_telemetry is not None:
+            try:
+                self._sub_motor_telemetry.undeclare()
+            except Exception:
+                pass
+            self._sub_motor_telemetry = None
 
         if self._pub_motor is not None:
             try:
