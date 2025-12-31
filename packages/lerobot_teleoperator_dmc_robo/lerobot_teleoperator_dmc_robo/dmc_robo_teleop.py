@@ -1,18 +1,61 @@
 from __future__ import annotations
 
-import os
-import select
+import json
 import sys
-import termios
 import time
-import tty
 from functools import cached_property
+from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 from lerobot.teleoperators.teleoperator import Teleoperator
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 
 from .config_dmc_robo_teleop import DmcRoboTeleopConfig
+
+
+def _get_cli_value(flag: str) -> str | None:
+    args = sys.argv[1:]
+    for i, arg in enumerate(args):
+        if arg.startswith(flag + "="):
+            return arg.split("=", 1)[1]
+        if arg == flag and i + 1 < len(args):
+            return args[i + 1]
+    return None
+
+
+def _get_cli_list(flag: str) -> list[str]:
+    args = sys.argv[1:]
+    raw_values: list[str] = []
+    for i, arg in enumerate(args):
+        if arg.startswith(flag + "="):
+            raw_values.append(arg.split("=", 1)[1])
+        elif arg == flag and i + 1 < len(args):
+            raw_values.append(args[i + 1])
+
+    out: list[str] = []
+    for raw in raw_values:
+        raw = raw.strip()
+        if raw.startswith("["):
+            try:
+                data = json.loads(raw)
+            except Exception:
+                data = raw
+            if isinstance(data, list):
+                out.extend(str(v) for v in data)
+            else:
+                out.append(str(data))
+        else:
+            out.append(raw)
+    return out
+
+
+def _load_remote_ui_module() -> Any:
+    try:
+        from . import remote_zenoh_ui as module
+    except Exception as e:
+        raise RuntimeError("failed to import bundled remote_zenoh_ui module") from e
+    return module
 
 
 class DmcRoboTeleop(Teleoperator):
@@ -24,10 +67,13 @@ class DmcRoboTeleop(Teleoperator):
         self.config = config
         self._connected = False
         self._action = {"v_l": 0.0, "v_r": 0.0}
-        self._stdin_fd: int | None = None
-        self._stdin_termios: list[Any] | None = None
+        self._app = None
+        self._viewer_window = None
+        self._viewer_client = None
+        self._viewer_bridge = None
+        self._viewer_module = None
+        self._closing = False
         self._last_input_ts = 0.0
-        self._key_last_seen: dict[str, float] = {}
 
     @cached_property
     def action_features(self) -> dict:
@@ -44,11 +90,76 @@ class DmcRoboTeleop(Teleoperator):
     def connect(self, calibrate: bool = True) -> None:
         if self._connected:
             raise DeviceAlreadyConnectedError(f"{self} already connected")
-        if not sys.stdin.isatty():
-            raise RuntimeError("stdin is not a TTY; keyboard teleop requires a terminal")
-        self._stdin_fd = sys.stdin.fileno()
-        self._stdin_termios = termios.tcgetattr(self._stdin_fd)
-        tty.setcbreak(self._stdin_fd)
+
+        if not self.config.viewer.enabled:
+            self._connected = True
+            self.configure()
+            return
+
+        try:
+            from PySide6.QtWidgets import QApplication
+        except Exception as e:  # pragma: no cover - optional GUI dependency
+            raise RuntimeError("PySide6 is required for GUI teleop. Install it first.") from e
+
+        module = _load_remote_ui_module()
+        self._viewer_module = module
+
+        robot_id = self.config.viewer.robot_id
+        if not robot_id:
+            robot_id = _get_cli_value("--robot.robot_id") or _get_cli_value("--robot.id")
+        if not robot_id:
+            raise RuntimeError("teleop.viewer.robot_id is required to launch the viewer")
+
+        zenoh_config_path = self.config.viewer.zenoh_config_path
+        if zenoh_config_path is None:
+            zpath = _get_cli_value("--robot.zenoh_config_path")
+            if zpath:
+                zenoh_config_path = Path(zpath)
+
+        connect_endpoints = list(self.config.viewer.connect)
+        if not connect_endpoints:
+            connect_endpoints = _get_cli_list("--robot.connect")
+
+        connect_mode = self.config.viewer.connect_mode or _get_cli_value("--robot.connect_mode") or "peer"
+
+        ui_config = module.UIConfig(
+            motor_speed_step_mps=float(self.config.motor.speed_step_mps),
+            motor_publish_hz=float(self.config.motor.publish_hz),
+            motor_deadman_ms=int(self.config.motor.deadman_ms),
+            lidar_update_hz=float(self.config.lidar.update_hz),
+            lidar_max_points=int(self.config.lidar.max_points),
+            lidar_range_m=float(self.config.lidar.range_m),
+            lidar_flip_y=bool(self.config.lidar.flip_y),
+        )
+
+        open_session = module._build_session_opener(
+            config_path=zenoh_config_path, mode=connect_mode, connect_endpoints=list(connect_endpoints)
+        )
+
+        args = SimpleNamespace(
+            robot_id=robot_id,
+            print_pub=False,
+            print_pub_motor_all=False,
+            print_motor_period=False,
+        )
+
+        app = QApplication.instance() or QApplication(sys.argv[:1])
+        bridge = module._Bridge()
+        client = module.ZenohClient(
+            open_session=open_session, robot_id=robot_id, bridge=bridge, print_publish=False
+        )
+        win = module.MainWindow(client=client, bridge=bridge, args=args, ui_config=ui_config)
+        app.installEventFilter(win._key_filter)
+        try:
+            win._motor_timer.stop()
+        except Exception:
+            pass
+        win.show()
+
+        self._app = app
+        self._viewer_window = win
+        self._viewer_client = client
+        self._viewer_bridge = bridge
         self._last_input_ts = time.monotonic()
         self._connected = True
         self.configure()
@@ -63,93 +174,30 @@ class DmcRoboTeleop(Teleoperator):
     def configure(self) -> None:
         return None
 
-    def _read_keys(self) -> list[str]:
-        if self._stdin_fd is None:
-            return []
-        ready, _, _ = select.select([self._stdin_fd], [], [], 0)
-        if not ready:
-            return []
-        data = os.read(self._stdin_fd, 32)
-        keys: list[str] = []
-        i = 0
-        while i < len(data):
-            b = data[i]
-            if b == 0x1B and i + 2 < len(data) and data[i + 1] == 0x5B:
-                code = data[i + 2]
-                if code == 0x41:
-                    keys.append("UP")
-                elif code == 0x42:
-                    keys.append("DOWN")
-                elif code == 0x43:
-                    keys.append("RIGHT")
-                elif code == 0x44:
-                    keys.append("LEFT")
-                i += 3
-                continue
-            if 0x20 <= b < 0x7F:
-                keys.append(chr(b))
-            i += 1
-        return keys
-
-    def _pressed_keys(self) -> set[str]:
-        now = time.monotonic()
-        hz = float(self.config.motor.publish_hz)
-        hold_timeout = 0.2 if hz <= 0 else max(0.2, 1.5 / hz)
-        pressed = {k for k, t in self._key_last_seen.items() if (now - t) <= hold_timeout}
-        if not pressed:
-            self._key_last_seen.clear()
-        return pressed
-
     def get_action(self) -> dict[str, Any]:
         if not self._connected:
             raise DeviceNotConnectedError()
-        step = float(self.config.motor.speed_step_mps)
-        keys = self._read_keys()
-        if keys:
-            now = time.monotonic()
-            self._last_input_ts = now
-            for key in keys:
-                self._key_last_seen[key] = now
+        if self._viewer_window is None:
+            return dict(self._action)
 
-        pressed = self._pressed_keys()
+        if self._app is not None:
+            try:
+                self._app.processEvents()
+            except Exception:
+                self._closing = True
 
-        if "UP" in pressed or "DOWN" in pressed or "LEFT" in pressed or "RIGHT" in pressed:
-            up = "UP" in pressed
-            down = "DOWN" in pressed
-            left = "LEFT" in pressed
-            right = "RIGHT" in pressed
+        if self._closing or getattr(self._viewer_window, "_closing", False):
+            self._action["v_l"] = 0.0
+            self._action["v_r"] = 0.0
+            return dict(self._action)
 
-            if up and right and not left:
-                v_l, v_r = step, step * 0.5
-            elif up and left and not right:
-                v_l, v_r = step * 0.5, step
-            elif down and right and not left:
-                v_l, v_r = -step, -step * 0.5
-            elif down and left and not right:
-                v_l, v_r = -step * 0.5, -step
-            elif up:
-                v_l, v_r = step, step
-            elif down:
-                v_l, v_r = -step, -step
-            elif left:
-                v_l, v_r = -step * 0.3, step * 0.3
-            elif right:
-                v_l, v_r = step * 0.3, -step * 0.3
-            else:
-                v_l, v_r = 0.0, 0.0
-        else:
-            v_l = 0.0
-            v_r = 0.0
-            if "r" in pressed or "R" in pressed:
-                v_l += step
-            if "f" in pressed or "F" in pressed:
-                v_l -= step
-            if "u" in pressed or "U" in pressed:
-                v_r += step
-            if "j" in pressed or "J" in pressed:
-                v_r -= step
+        pressed = set(getattr(self._viewer_window, "_pressed", set()))
+        if pressed:
+            self._last_input_ts = time.monotonic()
 
-        if " " in pressed or "x" in pressed or "X" in pressed or "0" in pressed:
+        try:
+            v_l, v_r = self._viewer_window._desired_motor()
+        except Exception:
             v_l, v_r = 0.0, 0.0
 
         deadman_s = float(self.config.motor.deadman_ms) / 1000.0
@@ -158,6 +206,11 @@ class DmcRoboTeleop(Teleoperator):
 
         self._action["v_l"] = float(v_l)
         self._action["v_r"] = float(v_r)
+        if hasattr(self._viewer_window, "_lbl_motor"):
+            try:
+                self._viewer_window._lbl_motor.setText(f"v_l={v_l:+.3f} v_r={v_r:+.3f}")
+            except Exception:
+                pass
         return dict(self._action)
 
     def send_feedback(self, feedback: dict[str, Any]) -> None:
@@ -166,8 +219,16 @@ class DmcRoboTeleop(Teleoperator):
         return None
 
     def disconnect(self) -> None:
-        if self._stdin_fd is not None and self._stdin_termios is not None:
-            termios.tcsetattr(self._stdin_fd, termios.TCSADRAIN, self._stdin_termios)
-            self._stdin_fd = None
-            self._stdin_termios = None
+        if self._viewer_window is not None:
+            try:
+                self._viewer_window.close()
+            except Exception:
+                pass
+            self._viewer_window = None
+        if self._viewer_client is not None:
+            try:
+                self._viewer_client.close()
+            except Exception:
+                pass
+            self._viewer_client = None
         self._connected = False

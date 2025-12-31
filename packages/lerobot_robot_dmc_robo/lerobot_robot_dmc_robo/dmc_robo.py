@@ -169,6 +169,7 @@ class DmcRobo(Robot):
         self._last_lidar_ts_ms: int = -1
         self._auto_imu_path: str | None = None
         self._warned_camera_shape = False
+        self._warned_camera_missing = False
         self._warned_imu_missing = False
         self._seq = 0
 
@@ -297,12 +298,34 @@ class DmcRobo(Robot):
         if not self.is_connected:
             raise DeviceNotConnectedError()
 
-        with self._lock:
-            image = self._last_image
-            imu = self._last_imu
-            lidar_points = list(self._last_lidar_points)
-            lidar_seq = self._last_lidar_seq
-            lidar_ts_ms = self._last_lidar_ts_ms
+        deadline = time.monotonic() + float(self.config.camera_wait_timeout_s)
+        image = None
+        imu = None
+        lidar_points: list[tuple[float, float, float | None]] = []
+        lidar_seq = -1
+        lidar_ts_ms = -1
+
+        while True:
+            with self._lock:
+                image = self._last_image
+                imu = self._last_imu
+                lidar_points = list(self._last_lidar_points)
+                lidar_seq = self._last_lidar_seq
+                lidar_ts_ms = self._last_lidar_ts_ms
+
+            if image is not None:
+                break
+            if time.monotonic() > deadline:
+                if self.config.camera_allow_missing:
+                    if not self._warned_camera_missing:
+                        logger.warning("no camera image received; returning blank frames")
+                        self._warned_camera_missing = True
+                    image = np.zeros(
+                        (self.config.camera_height, self.config.camera_width, 3), dtype=np.uint8
+                    )
+                    break
+                raise RuntimeError("no camera image received yet")
+            time.sleep(0.05)
 
         if image is None:
             raise RuntimeError("no camera image received yet")

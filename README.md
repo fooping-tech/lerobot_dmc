@@ -48,14 +48,53 @@ Expected logs:
 ## Use With LeRobot CLI
 
 ```
-lerobot-teleoperate --robot.type=dmc_robo --robot.robot_id <ROBOT_ID> --robot.connect tcp/<ROUTER_IP>:7447
-lerobot-record --robot.type=dmc_robo --robot.robot_id <ROBOT_ID> --robot.connect tcp/<ROUTER_IP>:7447
+lerobot-teleoperate --robot.type=dmc_robo --robot.robot_id <ROBOT_ID> --robot.connect tcp/<ROUTER_IP>:7447 --robot.imu_field_path .
+lerobot-record --robot.type=dmc_robo --robot.robot_id <ROBOT_ID> --robot.connect tcp/<ROUTER_IP>:7447 --robot.imu_field_path .
+```
+
+To launch teleop with the GUI viewer (camera + LiDAR + IMU charts): 
+
+```
+lerobot-teleoperate --teleop.type=dmc_robo_teleop --robot.type=dmc_robo --robot.robot_id <ROBOT_ID> --robot.connect tcp/<ROUTER_IP>:7447 --robot.imu_field_path .
+```
+
+This viewer reuses `packages/lerobot_teleoperator_dmc_robo/lerobot_teleoperator_dmc_robo/remote_zenoh_ui.py` and requires `PySide6` and `pyqtgraph`.
+Disable it if needed:
+
+```
+--teleop.viewer.enabled false
+```
+
+Full example with plugin discovery and Zenoh config:
+
+```
+lerobot-teleoperate \
+  --teleop.discover_packages_path=lerobot_teleoperator_dmc_robo \
+  --robot.discover_packages_path=lerobot_robot_dmc_robo \
+  --teleop.type=dmc_robo_teleop \
+  --robot.type=dmc_robo \
+  --robot.robot_id rasp-zero-01 \
+  --robot.zenoh_config_path zenoh_remote.json5 \
+  --robot.imu_field_path . \
+  --fps 10
 ```
 
 If IMU payload uses root-level `gx/gy/gz`, pass:
 
 ```
 --robot.imu_field_path .
+```
+
+If the camera stream is slow to start, increase the initial wait:
+
+```
+--robot.camera_wait_timeout_s 10.0
+```
+
+If you want to keep teleop running even when camera frames are missing:
+
+```
+--robot.camera_allow_missing true
 ```
 
 ## Notes

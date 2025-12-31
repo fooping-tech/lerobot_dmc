@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from lerobot.teleoperators.config import TeleoperatorConfig
 
@@ -20,8 +21,18 @@ class LidarConfig:
     flip_y: bool = False
 
 
+@dataclass
+class ViewerConfig:
+    enabled: bool = True
+    robot_id: str | None = None
+    zenoh_config_path: Path | None = None
+    connect: list[str] = field(default_factory=list)
+    connect_mode: str = ""
+
+
 @TeleoperatorConfig.register_subclass("dmc_robo_teleop")
 @dataclass
 class DmcRoboTeleopConfig(TeleoperatorConfig):
     motor: MotorConfig = field(default_factory=MotorConfig)
     lidar: LidarConfig = field(default_factory=LidarConfig)
+    viewer: ViewerConfig = field(default_factory=ViewerConfig)

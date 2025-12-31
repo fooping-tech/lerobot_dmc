@@ -30,6 +30,12 @@ lerobot-teleoperate --robot.type=dmc_robo --robot.robot_id <ROBOT_ID> --robot.co
 lerobot-record --robot.type=dmc_robo --robot.robot_id <ROBOT_ID> --robot.connect tcp/<ROUTER_IP>:7447
 ```
 
+Teleop with GUI viewer (camera + LiDAR + IMU charts):
+
+```
+lerobot-teleoperate --teleop.type=dmc_robo_teleop --robot.type=dmc_robo --robot.robot_id <ROBOT_ID> --robot.connect tcp/<ROUTER_IP>:7447
+```
+
 If your environment uses a Zenoh config file instead of direct endpoints, pass:
 
 ```
@@ -40,6 +46,12 @@ If IMU payload uses root-level `gx/gy/gz`, pass:
 
 ```
 --robot.imu_field_path .
+```
+
+If you want to keep teleop running even when camera frames are missing:
+
+```
+--robot.camera_allow_missing true
 ```
 
 ## References

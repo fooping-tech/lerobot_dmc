@@ -1,6 +1,6 @@
 # Zenoh Remote UI（操作UIアプリ）
 
-このリポジトリの `remote_zenoh_ui.py` は、Zenoh pub/sub 経由でロボットを操作し、IMU（ジャイロ）とカメラを表示し、OLED表示文字列を送るデスクトップUIです。
+このリポジトリの `packages/lerobot_teleoperator_dmc_robo/lerobot_teleoperator_dmc_robo/remote_zenoh_ui.py` は、Zenoh pub/sub 経由でロボットを操作し、IMU（ジャイロ）とカメラを表示し、OLED表示文字列を送るデスクトップUIです。
 
 前提となる Zenoh キーやネットワーク構成の説明は `docs/zenoh_remote_pubsub.md` を参照してください。
 
@@ -21,11 +21,11 @@
 
 routerへ接続する例（推奨）:
 
-    python remote_zenoh_ui.py --robot-id <ROBOT_ID> --connect "tcp/<ROUTER_IP>:7447"
+    python packages/lerobot_teleoperator_dmc_robo/lerobot_teleoperator_dmc_robo/remote_zenoh_ui.py --robot-id <ROBOT_ID> --connect "tcp/<ROUTER_IP>:7447"
 
 json5設定ファイルを使う例:
 
-    python remote_zenoh_ui.py --robot-id <ROBOT_ID> --zenoh-config ./zenoh_remote.json5
+    python packages/lerobot_teleoperator_dmc_robo/lerobot_teleoperator_dmc_robo/remote_zenoh_ui.py --robot-id <ROBOT_ID> --zenoh-config ./zenoh_remote.json5
 
 ## config.toml（UIのデフォルト設定）
 
@@ -37,15 +37,15 @@ json5設定ファイルを使う例:
 
 publish しているメッセージをターミナルに出したい場合:
 
-    python remote_zenoh_ui.py --robot-id <ROBOT_ID> --connect "tcp/<ROUTER_IP>:7447" --print-pub
+    python packages/lerobot_teleoperator_dmc_robo/lerobot_teleoperator_dmc_robo/remote_zenoh_ui.py --robot-id <ROBOT_ID> --connect "tcp/<ROUTER_IP>:7447" --print-pub
 
 モータ指令を「全て」確認したい場合（止まる瞬間の揺れ等の解析用、かなり大量に出ます）:
 
-    python remote_zenoh_ui.py --robot-id <ROBOT_ID> --connect "tcp/<ROUTER_IP>:7447" --print-pub-motor-all
+    python packages/lerobot_teleoperator_dmc_robo/lerobot_teleoperator_dmc_robo/remote_zenoh_ui.py --robot-id <ROBOT_ID> --connect "tcp/<ROUTER_IP>:7447" --print-pub-motor-all
 
 モータの publish 周期（実測）を確認したい場合:
 
-    python remote_zenoh_ui.py --robot-id <ROBOT_ID> --connect "tcp/<ROUTER_IP>:7447" --print-motor-period
+    python packages/lerobot_teleoperator_dmc_robo/lerobot_teleoperator_dmc_robo/remote_zenoh_ui.py --robot-id <ROBOT_ID> --connect "tcp/<ROUTER_IP>:7447" --print-motor-period
 
 ## 操作（キーボード）
 
