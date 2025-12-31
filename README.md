@@ -1,17 +1,17 @@
 # lerobot_dmc
 
-LeRobot plugin packages for controlling `dmc_robo/<robot_id>` devices over Zenoh.
+Zenoh 経由で `dmc_robo/<robot_id>` デバイスを制御する LeRobot プラグインパッケージ。
 
-This repository contains two installable plugins:
+このリポジトリには、インストール可能な 2 つのプラグインが含まれます。
 
-- Robot: `lerobot_robot_dmc_robo` (Zenoh-based robot I/O for camera/IMU/LiDAR and motor commands)
-- Teleoperator: `lerobot_teleoperator_dmc_robo` (keyboard teleop defaults aligned with `docs/remote_ui.md`)
+- Robot: `lerobot_robot_dmc_robo`（カメラ/IMU/LiDAR の I/O とモーター指令の Zenoh ベース実装）
+- Teleoperator: `lerobot_teleoperator_dmc_robo`（`docs/remote_ui.md` に合わせたキーボードテレオペのデフォルト）
 
-## Quick Start
+## クイックスタート
 
-Python 3.10+ is required.
+Python 3.10+ が必要です。
 
-Create a local virtual environment (optional but recommended):  
+ローカル仮想環境を作成（任意ですが推奨）:
 
 ```
 python -m venv .venv
@@ -19,14 +19,29 @@ source .venv/bin/activate
 python -m pip install -U pip
 ```
 
-Install both plugins in editable mode:
+両プラグインを editable モードでインストール:
 
 ```
 pip install -e packages/lerobot_robot_dmc_robo
 pip install -e packages/lerobot_teleoperator_dmc_robo
 ```
 
-## Robot Smoke Test
+## Hugging Face ログイン（データセットのアップロード用）
+
+Hugging Face Hub にデータセットをアップロードする場合（例: `lerobot-record --dataset.repo_id ...`）、一度ログインしてください:
+
+```
+hf auth login
+```
+
+手順:
+- https://huggingface.co/settings/tokens でアクセストークンを作成（権限: `write`）。
+- プロンプトが出たらトークンを貼り付け（入力は非表示）。
+- 「Add token as git credential?」と聞かれたら `Y` を選び、OS のキーチェーンに保存。
+
+ログイン後、トークンは `~/.cache/huggingface/` に保存され、以後の Hub 操作で再利用されます。
+
+## ロボットのスモークテスト
 
 ```
 python -m lerobot_robot_dmc_robo.smoke_test \
@@ -35,44 +50,44 @@ python -m lerobot_robot_dmc_robo.smoke_test \
   --imu-field-path .
 ```
 
-To wait for a LiDAR scan as well:
+LiDAR スキャンも待つ場合:
 
 ```
 --wait-lidar
 ```
 
-Expected logs:
+期待されるログ:
 - "zenoh session opened"
 - "decoded image shape=(H,W,3)"
 
-## Use With LeRobot CLI
+## LeRobot CLI で使用
 
 ```
 lerobot-teleoperate --robot.type=dmc_robo --robot.robot_id <ROBOT_ID> --robot.connect tcp/<ROUTER_IP>:7447 --robot.imu_field_path .
 lerobot-record --robot.type=dmc_robo --robot.robot_id <ROBOT_ID> --robot.connect tcp/<ROUTER_IP>:7447 --robot.imu_field_path .
 ```
 
-To launch teleop with the GUI viewer (camera + LiDAR + IMU charts): 
+GUI ビューア（カメラ + LiDAR + IMU チャート）付きでテレオペ起動:
 
 ```
 lerobot-teleoperate --teleop.type=dmc_robo_teleop --robot.type=dmc_robo --robot.robot_id <ROBOT_ID> --robot.connect tcp/<ROUTER_IP>:7447 --robot.imu_field_path .
 ```
 
-This viewer reuses `packages/lerobot_teleoperator_dmc_robo/lerobot_teleoperator_dmc_robo/remote_zenoh_ui.py` and requires `PySide6` and `pyqtgraph`.
-Disable it if needed:
+このビューアは `packages/lerobot_teleoperator_dmc_robo/lerobot_teleoperator_dmc_robo/remote_zenoh_ui.py` を再利用しており、`PySide6` と `pyqtgraph` が必要です。
+無効化したい場合:
 
 ```
 --teleop.viewer.enabled false
 ```
 
-Teleop keys (GUI):
-- `w`: forward, `s`/`x`: backward
-- `a`: left rotate, `d`: right rotate
-- `q`/`e`/`z`/`c`: diagonals (forward/back + left/right)
-- `r`/`f` + `u`/`j`: per-wheel control (lower priority than WASD)
-Full details: `docs/remote_ui.md`.
+テレオペキー（GUI）:
+- `w`: 前進、`s`/`x`: 後退
+- `a`: 左旋回、`d`: 右旋回
+- `q`/`e`/`z`/`c`: 斜め（前/後 + 左/右）
+- `r`/`f` + `u`/`j`: 各輪操作（WASD より優先度は低い）
+詳細: `docs/remote_ui.md`。
 
-Full example with plugin discovery and Zenoh config:
+プラグイン発見と Zenoh 設定を含む完全な例:
 
 ```
 lerobot-teleoperate \
@@ -86,7 +101,7 @@ lerobot-teleoperate \
   --fps 10
 ```
 
-Recording example (note the dataset FPS flag):
+記録例（dataset FPS フラグに注意）:
 
 ```
 lerobot-record \
@@ -102,26 +117,26 @@ lerobot-record \
   --dataset.fps 10
 ```
 
-If IMU payload uses root-level `gx/gy/gz`, pass:
+IMU ペイロードが root レベルの `gx/gy/gz` を使う場合:
 
 ```
 --robot.imu_field_path .
 ```
 
-If the camera stream is slow to start, increase the initial wait:
+カメラストリームの開始が遅い場合は、初期待機を延ばします:
 
 ```
 --robot.camera_wait_timeout_s 10.0
 ```
 
-If you want to keep teleop running even when camera frames are missing:
+カメラフレームが欠けてもテレオペを継続したい場合:
 
 ```
 --robot.camera_allow_missing true
 ```
 
-## Notes
+## 注記
 
-- Robot control and Zenoh topic details are documented in `docs/remote_ui.md` and `docs/zenoh_remote_pubsub.md`.
-- The `dmc_ai_host` repository contains the original UI and reference tools; this repo mirrors the docs for offline use.
-- LeRobot upstream references live in `../lerobot` (see `docs/source/integrate_hardware.mdx`).
+- ロボット制御と Zenoh トピックの詳細は `docs/remote_ui.md` と `docs/zenoh_remote_pubsub.md` を参照。
+- `dmc_ai_host` リポジトリに元の UI と参照ツールがあり、本リポジトリはオフライン用にドキュメントをミラーしています。
+- LeRobot 上流の参照は `../lerobot` にあります（`docs/source/integrate_hardware.mdx` を参照）。
