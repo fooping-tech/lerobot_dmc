@@ -17,6 +17,7 @@ Python 3.10+ が必要です。
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -U pip
+python -m pip install -r requirements.txt
 ```
 
 両プラグインを editable モードでインストール:
@@ -25,6 +26,26 @@ python -m pip install -U pip
 pip install -e packages/lerobot_robot_dmc_robo
 pip install -e packages/lerobot_teleoperator_dmc_robo
 ```
+
+## シリアルコントローラを使う場合
+
+シリアルコントローラから `motor/cmd` を送るには、先にブリッジを起動しておく必要があります。
+
+```
+python serial_motor_bridge.py \
+  --robot-id <ROBOT_ID> \
+  --serial /dev/tty.usbmodemXXXX \
+  --connect "tcp/<ROUTER_IP>:7447"
+```
+
+設定ファイルを使う場合:
+
+```
+python serial_motor_bridge.py \
+  --zenoh-config ./zenoh_remote.json5
+```
+
+`config.toml` を使う場合は `--serial` と `--robot-id` を省略できます（`[robot].robot_id` を設定）。
 
 ## Hugging Face ログイン（データセットのアップロード用）
 

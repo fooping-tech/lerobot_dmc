@@ -1,0 +1,8 @@
+lerobot
+eclipse-zenoh
+numpy
+Pillow
+PySide6
+pyqtgraph
+pyserial
+tomli; python_version < "3.11"
