@@ -117,10 +117,19 @@ lerobot-record \
   --dataset.fps 10
 ```
 
-IMU ペイロードが root レベルの `gx/gy/gz` を使う場合:
+IMU ペイロードが root レベルの `gx/gy/gz`（ジャイロ）または `ax/ay/az`（加速度）を使う場合:
 
 ```
 --robot.imu_field_path .
+```
+
+ジャイロと加速度が同じ階層（フラット）に並んでいる場合は、`--robot.imu_field_path .` だけで両方に適用されます（`imu_accel_field_path` は省略可）。
+
+ジャイロと加速度を別キーで同時に記録したい場合（例: `gyro` と `accel` を別に持つpayload）:
+
+```
+--robot.imu_field_path gyro
+--robot.imu_accel_field_path accel
 ```
 
 カメラストリームの開始が遅い場合は、初期待機を延ばします:

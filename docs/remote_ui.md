@@ -1,6 +1,6 @@
 # Zenoh Remote UI（操作UIアプリ）
 
-このリポジトリの `packages/lerobot_teleoperator_dmc_robo/lerobot_teleoperator_dmc_robo/remote_zenoh_ui.py` は、Zenoh pub/sub 経由でロボットを操作し、IMU（ジャイロ）とカメラを表示し、OLED表示文字列を送るデスクトップUIです。
+このリポジトリの `packages/lerobot_teleoperator_dmc_robo/lerobot_teleoperator_dmc_robo/remote_zenoh_ui.py` は、Zenoh pub/sub 経由でロボットを操作し、IMU（ジャイロ/加速度）とカメラを表示し、OLED表示文字列を送るデスクトップUIです。
 
 前提となる Zenoh キーやネットワーク構成の説明は `docs/zenoh_remote_pubsub.md` を参照してください。
 
@@ -72,16 +72,18 @@ WASD 系の合成操作が優先です（キー押下中だけ一定周期で pu
 - `STOP` ボタンでもゼロ指令を送れます。
 - `duration` 指定で一定時間だけ動かしたい場合は `docs/remote_zenoh_tool.py motor --duration-s ...` を使ってください（UIは押している間だけ動かす設計です）。
 
-## IMU（ジャイロ）チャート
+## IMU（ジャイロ/加速度）チャート
 
-`imu/state` の JSON スキーマは環境依存の可能性があるため、UIの `field path` でジャイロ3軸（x,y,z）が入っているフィールドを指定できます。
+`imu/state` の JSON スキーマは環境依存の可能性があるため、UIの `field path` でジャイロ/加速度の3軸（x,y,z）が入っているフィールドを指定できます。
 
 例:
 
 - `gyro`
 - `angular_velocity`
+- `accel`
+- `linear_acceleration`
 
-raw JSON を見て、`gyro.x` のように `.` 区切りで辿れるパスを指定してください（配列は `0` / `1` / `2` の添字も可）。
+raw JSON を見て、`gyro.x` や `accel.x` のように `.` 区切りで辿れるパスを指定してください（配列は `0` / `1` / `2` の添字も可）。
 
 ## カメラ表示
 

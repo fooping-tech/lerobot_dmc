@@ -71,31 +71,72 @@ def _get_by_path(obj: Any, path: str) -> Any:
     return cur
 
 
-def _extract_vec3(payload: Any, path: str) -> tuple[float, float, float] | None:
-    candidate = _get_by_path(payload, path)
-    if candidate is None:
-        return None
-
-    if isinstance(candidate, dict):
-        for keys in (("x", "y", "z"), ("gx", "gy", "gz"), ("wx", "wy", "wz")):
-            x, y, z = candidate.get(keys[0]), candidate.get(keys[1]), candidate.get(keys[2])
-            if all(isinstance(v, (int, float)) for v in (x, y, z)):
-                return float(x), float(y), float(z)
-        return None
-
+def _extract_vec3_from_candidate(
+    candidate: Any, key_sets: tuple[tuple[str, str, str], ...]
+) -> tuple[float, float, float] | None:
     if isinstance(candidate, (list, tuple)) and len(candidate) >= 3:
         x, y, z = candidate[0], candidate[1], candidate[2]
         if all(isinstance(v, (int, float)) for v in (x, y, z)):
             return float(x), float(y), float(z)
         return None
 
+    if isinstance(candidate, dict):
+        for keys in key_sets:
+            x, y, z = candidate.get(keys[0]), candidate.get(keys[1]), candidate.get(keys[2])
+            if all(isinstance(v, (int, float)) for v in (x, y, z)):
+                return float(x), float(y), float(z)
+        return None
+
     return None
 
 
-def _autodetect_vec3(payload: Any) -> tuple[str | None, tuple[float, float, float] | None]:
+def _extract_vec3_gyro(payload: Any, path: str) -> tuple[float, float, float] | None:
+    candidate = _get_by_path(payload, path)
+    if candidate is None:
+        return None
+
+    return _extract_vec3_from_candidate(
+        candidate,
+        (
+            ("gx", "gy", "gz"),
+            ("wx", "wy", "wz"),
+            ("x", "y", "z"),
+        ),
+    )
+
+def _extract_vec3_accel(payload: Any, path: str) -> tuple[float, float, float] | None:
+    candidate = _get_by_path(payload, path)
+    if candidate is None:
+        return None
+
+    return _extract_vec3_from_candidate(
+        candidate,
+        (
+            ("ax", "ay", "az"),
+            ("x", "y", "z"),
+        ),
+    )
+
+
+def _autodetect_vec3_gyro(payload: Any) -> tuple[str | None, tuple[float, float, float] | None]:
     candidates = ("gyro", "gyr", "angular_velocity", "angularVelocity")
     for path in candidates:
-        vec = _extract_vec3(payload, path)
+        vec = _extract_vec3_gyro(payload, path)
+        if vec is not None:
+            return path, vec
+    return None, None
+
+
+def _autodetect_vec3_accel(payload: Any) -> tuple[str | None, tuple[float, float, float] | None]:
+    candidates = (
+        "accel",
+        "acc",
+        "linear_acceleration",
+        "linearAcceleration",
+        "acceleration",
+    )
+    for path in candidates:
+        vec = _extract_vec3_accel(payload, path)
         if vec is not None:
             return path, vec
     return None, None
@@ -235,15 +276,18 @@ class DmcRobo(Robot):
 
         self._lock = Lock()
         self._last_image: np.ndarray | None = None
-        self._last_imu: np.ndarray | None = None
+        self._last_imu_gyro: np.ndarray | None = None
+        self._last_imu_accel: np.ndarray | None = None
         self._last_lidar_points: list[tuple[float, float, float | None]] = []
         self._last_lidar_seq: int = -1
         self._last_lidar_ts_ms: int = -1
         self._last_motor_telemetry: dict[str, Any] = _default_motor_telemetry()
-        self._auto_imu_path: str | None = None
+        self._auto_imu_gyro_path: str | None = None
+        self._auto_imu_accel_path: str | None = None
         self._warned_camera_shape = False
         self._warned_camera_missing = False
-        self._warned_imu_missing = False
+        self._warned_imu_gyro_missing = False
+        self._warned_imu_accel_missing = False
         self._seq = 0
 
     @cached_property
@@ -253,6 +297,9 @@ class DmcRobo(Robot):
             "imu.gyro.x": float,
             "imu.gyro.y": float,
             "imu.gyro.z": float,
+            "imu.accel.x": float,
+            "imu.accel.y": float,
+            "imu.accel.z": float,
             "lidar.points": list,
             "lidar.seq": int,
             "lidar.ts_ms": int,
@@ -327,25 +374,48 @@ class DmcRobo(Robot):
                 logger.warning("imu json decode failed: %s", e)
                 return
 
-            path = self.config.imu_field_path
-            if not path and self._auto_imu_path:
-                path = self._auto_imu_path
+            gyro_path = self.config.imu_field_path
+            if not gyro_path and self._auto_imu_gyro_path:
+                gyro_path = self._auto_imu_gyro_path
 
-            vec = _extract_vec3(payload, path) if path else None
-            if vec is None and not path:
-                detected_path, vec = _autodetect_vec3(payload)
-                if detected_path and vec is not None:
-                    self._auto_imu_path = detected_path
-                    logger.info("auto-detected imu field path: %s", detected_path)
+            gyro_vec = _extract_vec3_gyro(payload, gyro_path) if gyro_path else None
+            if gyro_vec is None and not gyro_path:
+                detected_path, gyro_vec = _autodetect_vec3_gyro(payload)
+                if detected_path and gyro_vec is not None:
+                    self._auto_imu_gyro_path = detected_path
+                    logger.info("auto-detected imu gyro field path: %s", detected_path)
 
-            if vec is None:
-                if not self._warned_imu_missing:
-                    logger.warning("imu vector not found; set imu_field_path to extract gyro")
-                    self._warned_imu_missing = True
+            accel_path = self.config.imu_accel_field_path
+            if accel_path is None and self.config.imu_field_path is not None:
+                accel_path = self.config.imu_field_path
+            if not accel_path and self._auto_imu_accel_path:
+                accel_path = self._auto_imu_accel_path
+
+            accel_vec = _extract_vec3_accel(payload, accel_path) if accel_path else None
+            if accel_vec is None and not accel_path:
+                detected_path, accel_vec = _autodetect_vec3_accel(payload)
+                if detected_path and accel_vec is not None:
+                    self._auto_imu_accel_path = detected_path
+                    logger.info("auto-detected imu accel field path: %s", detected_path)
+
+            if gyro_vec is None and not self._warned_imu_gyro_missing:
+                logger.warning("imu gyro vector not found; set imu_field_path to extract gyro")
+                self._warned_imu_gyro_missing = True
+
+            if accel_vec is None and not self._warned_imu_accel_missing:
+                logger.warning(
+                    "imu accel vector not found; set imu_accel_field_path to extract accel"
+                )
+                self._warned_imu_accel_missing = True
+
+            if gyro_vec is None and accel_vec is None:
                 return
 
             with self._lock:
-                self._last_imu = np.array(vec, dtype=np.float32)
+                if gyro_vec is not None:
+                    self._last_imu_gyro = np.array(gyro_vec, dtype=np.float32)
+                if accel_vec is not None:
+                    self._last_imu_accel = np.array(accel_vec, dtype=np.float32)
 
         def on_lidar(sample: Any) -> None:
             try:
@@ -400,7 +470,8 @@ class DmcRobo(Robot):
 
         deadline = time.monotonic() + float(self.config.camera_wait_timeout_s)
         image = None
-        imu = None
+        imu_gyro = None
+        imu_accel = None
         lidar_points: list[tuple[float, float, float | None]] = []
         lidar_seq = -1
         lidar_ts_ms = -1
@@ -409,7 +480,8 @@ class DmcRobo(Robot):
         while True:
             with self._lock:
                 image = self._last_image
-                imu = self._last_imu
+                imu_gyro = self._last_imu_gyro
+                imu_accel = self._last_imu_accel
                 lidar_points = list(self._last_lidar_points)
                 lidar_seq = self._last_lidar_seq
                 lidar_ts_ms = self._last_lidar_ts_ms
@@ -432,14 +504,19 @@ class DmcRobo(Robot):
         if image is None:
             raise RuntimeError("no camera image received yet")
 
-        if imu is None:
-            imu = np.zeros(3, dtype=np.float32)
+        if imu_gyro is None:
+            imu_gyro = np.zeros(3, dtype=np.float32)
+        if imu_accel is None:
+            imu_accel = np.zeros(3, dtype=np.float32)
 
         return {
             "camera": image,
-            "imu.gyro.x": float(imu[0]),
-            "imu.gyro.y": float(imu[1]),
-            "imu.gyro.z": float(imu[2]),
+            "imu.gyro.x": float(imu_gyro[0]),
+            "imu.gyro.y": float(imu_gyro[1]),
+            "imu.gyro.z": float(imu_gyro[2]),
+            "imu.accel.x": float(imu_accel[0]),
+            "imu.accel.y": float(imu_accel[1]),
+            "imu.accel.z": float(imu_accel[2]),
             "lidar.points": lidar_points,
             "lidar.seq": int(lidar_seq),
             "lidar.ts_ms": int(lidar_ts_ms),

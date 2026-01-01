@@ -89,11 +89,15 @@ JSON schema:
       "gx": 0.0,
       "gy": 0.0,
       "gz": 0.0,
+      "ax": 0.0,
+      "ay": 0.0,
+      "az": 0.0,
       "ts_ms": 1735467890123
     }
 
 フィールド:
 - `gx`/`gy`/`gz` (number): 角速度（単位は IMU ドライバ依存）
+- `ax`/`ay`/`az` (number): 加速度（単位は IMU ドライバ依存）
 - `ts_ms` (int): 取得時刻（epoch ms）
 
 ### oled

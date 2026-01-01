@@ -21,6 +21,7 @@ class DmcRoboConfig(RobotConfig):
     camera_allow_missing: bool = False
     motor_telemetry_enabled: bool = True
     imu_field_path: str | None = None
+    imu_accel_field_path: str | None = None
 
     max_speed_mps: float | None = 1.0
 

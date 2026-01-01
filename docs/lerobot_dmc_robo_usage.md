@@ -58,10 +58,19 @@ If your environment uses a Zenoh config file instead of direct endpoints, pass:
 --robot.zenoh_config_path path/to/zenoh_remote.json5
 ```
 
-If IMU payload uses root-level `gx/gy/gz`, pass:
+If IMU payload uses root-level `gx/gy/gz` (gyro) or `ax/ay/az` (accel), pass:
 
 ```
 --robot.imu_field_path .
+```
+
+If gyro + accel are flat at the same level, `--robot.imu_field_path .` applies to both (you can omit `imu_accel_field_path`).
+
+If you want to record gyro + accel separately (e.g., payload has `gyro` and `accel` objects):
+
+```
+--robot.imu_field_path gyro
+--robot.imu_accel_field_path accel
 ```
 
 If you want to keep teleop running even when camera frames are missing:

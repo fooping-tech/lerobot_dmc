@@ -407,7 +407,12 @@ def _extract_vec3(payload: Any, path: str) -> Optional[tuple[float, float, float
         return None
 
     if isinstance(candidate, dict):
-        for keys in (("x", "y", "z"), ("gx", "gy", "gz"), ("wx", "wy", "wz")):
+        for keys in (
+            ("x", "y", "z"),
+            ("gx", "gy", "gz"),
+            ("ax", "ay", "az"),
+            ("wx", "wy", "wz"),
+        ):
             x, y, z = candidate.get(keys[0]), candidate.get(keys[1]), candidate.get(keys[2])
             if all(isinstance(v, (int, float)) for v in (x, y, z)):
                 return float(x), float(y), float(z)
@@ -423,7 +428,16 @@ def _extract_vec3(payload: Any, path: str) -> Optional[tuple[float, float, float
 
 
 def _autodetect_vec3(payload: Any) -> tuple[Optional[str], Optional[tuple[float, float, float]]]:
-    candidates = ("gyro", "gyr", "angular_velocity", "angularVelocity")
+    candidates = (
+        "gyro",
+        "gyr",
+        "angular_velocity",
+        "angularVelocity",
+        "accel",
+        "acc",
+        "linear_acceleration",
+        "linearAcceleration",
+    )
     for path in candidates:
         vec = _extract_vec3(payload, path)
         if vec is not None:
@@ -643,10 +657,10 @@ class MainWindow:
         oled_form.addRow("text", row)
         left_layout.addWidget(oled_box)
 
-        imu_box = QGroupBox("IMU (gyro)")
+        imu_box = QGroupBox("IMU (gyro/accel)")
         imu_form = QFormLayout(imu_box)
         self._combo_gyro_path = QLineEdit()
-        self._combo_gyro_path.setPlaceholderText("auto (examples: gyro, angular_velocity)")
+        self._combo_gyro_path.setPlaceholderText("auto (examples: gyro, accel, angular_velocity)")
         imu_form.addRow("field path", self._combo_gyro_path)
         self._lbl_gyro_path = QLabel("auto: (not detected yet)")
         self._lbl_gyro_path.setFrameStyle(QFrame.Panel | QFrame.Sunken)
@@ -752,7 +766,7 @@ class MainWindow:
         self._plot = pg.PlotWidget()
         self._plot.showGrid(x=True, y=True, alpha=0.25)
         self._plot.addLegend()
-        self._plot.setLabel("left", "gyro")
+        self._plot.setLabel("left", "imu")
         self._plot.setLabel("bottom", "t", units="s")
         self._curve_x = self._plot.plot([], [], pen=pg.mkPen("r", width=2), name="x")
         self._curve_y = self._plot.plot([], [], pen=pg.mkPen("g", width=2), name="y")
