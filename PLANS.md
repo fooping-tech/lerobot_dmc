@@ -55,6 +55,25 @@
 （未完了。実装が進んだら、できたこと・できなかったこと・原因をここに追記する）
 
 
+## ExecPlan: Integrate Serial Input into Remote UI
+
+### Purpose / Big Picture
+
+`remote_zenoh_ui.py` と `serial_motor_bridge.py` の同時起動で `motor/cmd` が競合しないように、UI側でシリアル入力を取り込み、UI入力よりも常にシリアル入力を優先して publish する。
+
+### Plan of Work
+
+1) Teleop/UI 設定にシリアル設定を追加し、`config.toml` から読み込めるようにする。  
+2) `remote_zenoh_ui.py` にシリアル読取スレッドを統合し、UI入力とシリアル入力の仲裁（シリアル優先）を実装する。  
+3) `pyproject.toml` とドキュメント（README/serial_controller.md/config.toml）を更新し、起動方法と設定方法を明記する。
+
+### Progress
+
+- [x] 設定・依存の追加
+- [x] シリアル統合と優先ロジックの実装
+- [x] ドキュメント更新
+
+
 ## Context and Orientation
 
 このリポジトリ（`dmc_ai_host`）にはすでに Zenoh 経由の remote 側ツールがあります。

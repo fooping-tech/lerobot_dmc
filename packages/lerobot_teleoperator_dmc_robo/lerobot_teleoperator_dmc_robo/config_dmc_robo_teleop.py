@@ -30,9 +30,22 @@ class ViewerConfig:
     connect_mode: str = ""
 
 
+@dataclass
+class SerialConfig:
+    enabled: bool = False
+    port: str | None = None
+    baud: int = 115200
+    raw_max: int = 2000
+    max_mps: float = 0.5
+    timeout_s: float = 0.5
+    print_lines: bool = False
+    print_values: bool = False
+
+
 @TeleoperatorConfig.register_subclass("dmc_robo_teleop")
 @dataclass
 class DmcRoboTeleopConfig(TeleoperatorConfig):
     motor: MotorConfig = field(default_factory=MotorConfig)
     lidar: LidarConfig = field(default_factory=LidarConfig)
     viewer: ViewerConfig = field(default_factory=ViewerConfig)
+    serial: SerialConfig = field(default_factory=SerialConfig)

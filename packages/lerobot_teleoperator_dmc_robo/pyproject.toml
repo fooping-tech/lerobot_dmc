@@ -14,6 +14,7 @@ dependencies = [
   "eclipse-zenoh",
   "PySide6",
   "pyqtgraph",
+  "pyserial",
 ]
 
 [tool.setuptools]

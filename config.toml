@@ -2,12 +2,16 @@
 robot_id = "rasp-zero-01"
 
 [controller]
+# Enable serial input for the UI when configured.
+enabled = true
 # USB serial device path (example for macOS). Update for your environment.
 serial = "/dev/tty.usbmodem11401"
 baud = 115200
 raw_max = 2000
 max_mps = 0.5
 publish_hz = 10.0
+timeout_s = 0.5
+print_values = true
 
 [motor]
 deadman_ms = 300

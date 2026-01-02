@@ -122,6 +122,23 @@ class DmcRoboTeleop(Teleoperator):
 
         connect_mode = self.config.viewer.connect_mode or _get_cli_value("--robot.connect_mode") or "peer"
 
+        serial_cfg = module.SerialConfig(
+            enabled=bool(self.config.serial.enabled),
+            port=self.config.serial.port,
+            baud=int(self.config.serial.baud),
+            raw_max=int(self.config.serial.raw_max),
+            max_mps=float(self.config.serial.max_mps),
+            timeout_s=float(self.config.serial.timeout_s),
+            print_lines=bool(self.config.serial.print_lines),
+            print_values=bool(self.config.serial.print_values),
+        )
+
+        if not serial_cfg.enabled and serial_cfg.port is None:
+            candidate = Path("config.toml")
+            if candidate.exists():
+                file_cfg = module._load_ui_config(candidate)
+                serial_cfg = file_cfg.serial
+
         ui_config = module.UIConfig(
             motor_speed_step_mps=float(self.config.motor.speed_step_mps),
             motor_publish_hz=float(self.config.motor.publish_hz),
@@ -130,6 +147,7 @@ class DmcRoboTeleop(Teleoperator):
             lidar_max_points=int(self.config.lidar.max_points),
             lidar_range_m=float(self.config.lidar.range_m),
             lidar_flip_y=bool(self.config.lidar.flip_y),
+            serial=serial_cfg,
         )
 
         open_session = module._build_session_opener(
@@ -192,13 +210,14 @@ class DmcRoboTeleop(Teleoperator):
             return dict(self._action)
 
         pressed = set(getattr(self._viewer_window, "_pressed", set()))
-        if pressed:
-            self._last_input_ts = time.monotonic()
 
         try:
-            v_l, v_r = self._viewer_window._desired_motor()
+            v_l, v_r, source = self._viewer_window._resolve_motor_input()
         except Exception:
-            v_l, v_r = 0.0, 0.0
+            v_l, v_r, source = 0.0, 0.0, "ui"
+
+        if source == "serial" or pressed:
+            self._last_input_ts = time.monotonic()
 
         deadman_s = float(self.config.motor.deadman_ms) / 1000.0
         if deadman_s > 0 and (time.monotonic() - self._last_input_ts) > deadman_s:
@@ -209,6 +228,11 @@ class DmcRoboTeleop(Teleoperator):
         if hasattr(self._viewer_window, "_lbl_motor"):
             try:
                 self._viewer_window._lbl_motor.setText(f"v_l={v_l:+.3f} v_r={v_r:+.3f}")
+            except Exception:
+                pass
+        if hasattr(self._viewer_window, "_lbl_motor_source"):
+            try:
+                self._viewer_window._lbl_motor_source.setText(f"source={source}")
             except Exception:
                 pass
         return dict(self._action)

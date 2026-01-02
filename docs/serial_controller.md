@@ -1,6 +1,7 @@
-# Serial Controller -> Motor Command Bridge
+# Serial Controller (Integrated in GUI)
 
-USBシリアルの `L:<left>,R:<right>` を Zenoh の `motor/cmd` に変換して publish するブリッジです。
+USBシリアルの `L:<left>,R:<right>` は GUI テレオペ（`dmc_robo_teleop`）に統合されています。
+`serial_motor_bridge.py` の単体ブリッジは廃止しました。
 
 ## セットアップ
 
@@ -11,27 +12,15 @@ USBシリアルの `L:<left>,R:<right>` を Zenoh の `motor/cmd` に変換し�
 
 ## 起動
 
-シリアルデバイスを直接指定する例（リポジトリルートで実行）:
+シリアル入力は `lerobot-teleoperate` から利用します。
 
-    python serial_motor_bridge.py \
-      --robot-id <ROBOT_ID> \
-      --serial /dev/tty.usbmodemXXXX \
-      --connect "tcp/<ROUTER_IP>:7447"
+    lerobot-teleoperate --teleop.type=dmc_robo_teleop --robot.type=dmc_robo --robot.robot_id <ROBOT_ID> --robot.connect "tcp/<ROUTER_IP>:7447"
 
 起動直後はコントローラがキャリブレーション中で `L:` 行が流れない場合があります。完了すると `L:` 行が流れ始めます。
 
-`config.toml` を使う例（`[controller]` を設定）:
-
-    python serial_motor_bridge.py \
-      --robot-id <ROBOT_ID> \
-      --connect "tcp/<ROUTER_IP>:7447"
-
 ## 設定（config.toml）
 
-`serial_motor_bridge.py` は、カレントディレクトリに `config.toml` があれば自動で読み込みます。
-
-- 明示的に指定: `--config /path/to/config.toml`
-- 自動読み込みを無効化: `--no-config`
+`config.toml` は `lerobot-teleoperate` 起動時に読み込まれます。
 
 `[robot]` の主なキー:
 
@@ -39,21 +28,24 @@ USBシリアルの `L:<left>,R:<right>` を Zenoh の `motor/cmd` に変換し�
 
 `[controller]` の主なキー:
 
+- `enabled`: GUIテレオペでシリアル入力を有効化したい場合に `true`
 - `serial`: シリアルデバイスパス（必須）
 - `baud`: ボーレート（USB CDC の場合は実質無視されます）
 - `raw_max`: raw 最大値（L/R ボタン倍増込み）
 - `max_mps`: raw_max 到達時の速度（mps）
-- `publish_hz`: publish 周期（Hz）。間隔内の `L/R` を平均して送信します
+- `publish_hz`: UI の publish 周期（Hz）
 - `deadman_ms`: deadman 上書き（未指定なら `[motor].deadman_ms` を使用）
+- `timeout_s`: GUIテレオペでシリアル入力が有効とみなす猶予（秒）
 
 ## デバッグ
 
-- 受信値の表示: `--print-lines`
-- 変換前後の表示: `--print-values`
-- publish payload の表示: `--print-pub`
+`config.toml` の `[controller]` に以下を追加してください。
+
+- `print_lines = true`: 受信 raw をログに出力
+- `print_values = true`: 変換後の `v_l/v_r` をログに出力
 
 ## 停止
 
-ブリッジ終了時は `v_l=0` / `v_r=0` を送信します。UIが落ちた場合などは最小ツールで stop を投げてください。
+UI 終了時は `v_l=0` / `v_r=0` を送信します。UIが落ちた場合などは最小ツールで stop を投げてください。
 
     python docs/remote_zenoh_tool.py --robot-id <ROBOT_ID> --connect "tcp/<ROUTER_IP>:7447" stop

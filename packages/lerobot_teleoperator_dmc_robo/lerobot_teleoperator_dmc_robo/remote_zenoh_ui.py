@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
+import threading
 import time
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
@@ -52,6 +54,41 @@ def _clamp_int(v: int, lo: int, hi: int) -> int:
     return max(lo, min(hi, int(v)))
 
 
+LINE_RE = re.compile(r"^L:\s*(-?\d+)\s*,\s*R:\s*(-?\d+)\s*$")
+
+
+def _parse_line(text: str) -> Optional[tuple[int, int]]:
+    if not text.startswith("L:"):
+        return None
+    m = LINE_RE.match(text)
+    if not m:
+        return None
+    try:
+        left = int(m.group(1))
+        right = int(m.group(2))
+    except Exception:
+        return None
+    return left, right
+
+
+def _map_to_mps(raw: float, raw_max: int, max_mps: float) -> float:
+    if raw_max <= 0:
+        return 0.0
+    return float(raw) / float(raw_max) * float(max_mps)
+
+
+@dataclass(frozen=True)
+class SerialConfig:
+    enabled: bool = False
+    port: Optional[str] = None
+    baud: int = 115200
+    raw_max: int = 2000
+    max_mps: float = 0.5
+    timeout_s: float = 0.5
+    print_lines: bool = False
+    print_values: bool = False
+
+
 @dataclass(frozen=True)
 class UIConfig:
     motor_speed_step_mps: float = 0.50
@@ -61,6 +98,7 @@ class UIConfig:
     lidar_max_points: int = 5000
     lidar_range_m: float = 1.0
     lidar_flip_y: bool = False
+    serial: SerialConfig = field(default_factory=SerialConfig)
 
 
 def _load_ui_config(path: Optional[Path]) -> UIConfig:
@@ -70,6 +108,8 @@ def _load_ui_config(path: Optional[Path]) -> UIConfig:
     Supported TOML keys:
       [motor] speed_step_mps, publish_hz, deadman_ms
       [lidar] update_hz, max_points, range_m, flip_y
+      [controller] enabled, serial, baud, raw_max, max_mps, timeout_s, print_lines, print_values
+      [serial] (alias of [controller])
     """
     if path is None:
         return UIConfig()
@@ -77,6 +117,13 @@ def _load_ui_config(path: Optional[Path]) -> UIConfig:
     data = _load_toml_file(path)
     motor = _toml_get(data, ("motor",), {})
     lidar = _toml_get(data, ("lidar",), {})
+    controller = _toml_get(data, ("controller",), {})
+    serial_override = _toml_get(data, ("serial",), {})
+    if isinstance(serial_override, dict) and serial_override:
+        if isinstance(controller, dict):
+            controller = {**controller, **serial_override}
+        else:
+            controller = serial_override
 
     def _f(x: Any, default: float) -> float:
         try:
@@ -94,6 +141,11 @@ def _load_ui_config(path: Optional[Path]) -> UIConfig:
         if isinstance(x, bool):
             return x
         return bool(default)
+
+    def _s(x: Any, default: Optional[str]) -> Optional[str]:
+        if isinstance(x, str):
+            return x
+        return default
 
     speed_step = _clamp(
         _f(
@@ -134,6 +186,45 @@ def _load_ui_config(path: Optional[Path]) -> UIConfig:
     )
     lidar_flip_y = _b(_toml_get(lidar, ("flip_y",), UIConfig.lidar_flip_y), UIConfig.lidar_flip_y)
 
+    serial_port = _s(_toml_get(controller, ("serial",), None), None)
+    if serial_port is not None and not serial_port.strip():
+        serial_port = None
+
+    serial_enabled_raw = _toml_get(controller, ("enabled",), None)
+    if isinstance(serial_enabled_raw, bool):
+        serial_enabled = serial_enabled_raw
+    else:
+        serial_enabled = bool(serial_port)
+
+    serial_baud = _clamp_int(
+        _i(_toml_get(controller, ("baud",), SerialConfig.baud), SerialConfig.baud),
+        1200,
+        2000000,
+    )
+    serial_raw_max = _clamp_int(
+        _i(_toml_get(controller, ("raw_max",), SerialConfig.raw_max), SerialConfig.raw_max),
+        1,
+        10000,
+    )
+    serial_max_mps = _clamp(
+        _f(_toml_get(controller, ("max_mps",), SerialConfig.max_mps), SerialConfig.max_mps),
+        0.0,
+        5.0,
+    )
+    serial_timeout_s = _clamp(
+        _f(_toml_get(controller, ("timeout_s",), SerialConfig.timeout_s), SerialConfig.timeout_s),
+        0.05,
+        5.0,
+    )
+    serial_print_lines = _b(
+        _toml_get(controller, ("print_lines",), SerialConfig.print_lines),
+        SerialConfig.print_lines,
+    )
+    serial_print_values = _b(
+        _toml_get(controller, ("print_values",), SerialConfig.print_values),
+        SerialConfig.print_values,
+    )
+
     return UIConfig(
         motor_speed_step_mps=speed_step,
         motor_publish_hz=publish_hz,
@@ -142,6 +233,16 @@ def _load_ui_config(path: Optional[Path]) -> UIConfig:
         lidar_max_points=lidar_max_points,
         lidar_range_m=lidar_range_m,
         lidar_flip_y=lidar_flip_y,
+        serial=SerialConfig(
+            enabled=serial_enabled,
+            port=serial_port,
+            baud=serial_baud,
+            raw_max=serial_raw_max,
+            max_mps=serial_max_mps,
+            timeout_s=serial_timeout_s,
+            print_lines=serial_print_lines,
+            print_values=serial_print_values,
+        ),
     )
 
 
@@ -237,6 +338,156 @@ class MotorCommand:
         return json.dumps(self.to_dict()).encode("utf-8")
 
 
+class SerialState:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._last_raw_l = 0.0
+        self._last_raw_r = 0.0
+        self._last_v_l = 0.0
+        self._last_v_r = 0.0
+        self._last_ts = 0.0
+
+    def update(self, *, raw_l: float, raw_r: float, v_l: float, v_r: float) -> None:
+        ts = time.monotonic()
+        with self._lock:
+            self._last_raw_l = float(raw_l)
+            self._last_raw_r = float(raw_r)
+            self._last_v_l = float(v_l)
+            self._last_v_r = float(v_r)
+            self._last_ts = ts
+
+    def latest(
+        self, *, timeout_s: float
+    ) -> Optional[tuple[float, float, float, float, float]]:
+        now = time.monotonic()
+        with self._lock:
+            last_ts = self._last_ts
+            if last_ts <= 0:
+                return None
+            age_s = now - last_ts
+            if age_s > timeout_s:
+                return None
+            return (
+                self._last_v_l,
+                self._last_v_r,
+                self._last_raw_l,
+                self._last_raw_r,
+                age_s,
+            )
+
+
+class SerialReader(threading.Thread):
+    def __init__(
+        self,
+        *,
+        port: str,
+        baud: int,
+        raw_max: int,
+        max_mps: float,
+        state: SerialState,
+        stop_event: threading.Event,
+        log_cb: Any,
+        print_lines: bool,
+        print_values: bool,
+    ) -> None:
+        super().__init__(daemon=True)
+        self._port = port
+        self._baud = int(baud)
+        self._raw_max = int(raw_max)
+        self._max_mps = float(max_mps)
+        self._state = state
+        self._stop_event = stop_event
+        self._log = log_cb
+        self._print_lines = bool(print_lines)
+        self._print_values = bool(print_values)
+        self._log_lines = bool(print_lines)
+        self._log_values = bool(print_values)
+        self._last_log_t = 0.0
+        self._serial = None
+
+    def run(self) -> None:
+        try:
+            import serial  # provided by `pip install pyserial`
+        except Exception as e:
+            self._log(f"serial disabled: pyserial is required ({e})")
+            return
+        while not self._stop_event.is_set():
+            try:
+                ser = serial.Serial(self._port, baudrate=self._baud, timeout=0.01)
+            except Exception as e:
+                if self._stop_event.is_set():
+                    return
+                self._log(f"serial open failed: {e} (retrying)")
+                self._stop_event.wait(1.0)
+                continue
+
+            self._serial = ser
+            self._log(f"serial connected: {self._port} @ {self._baud}")
+            try:
+                try:
+                    ser.reset_input_buffer()
+                except Exception:
+                    pass
+
+                while not self._stop_event.is_set():
+                    try:
+                        line = ser.readline()
+                    except Exception as e:
+                        if self._stop_event.is_set():
+                            break
+                        self._log(f"serial read failed: {e}")
+                        break
+                    if not line:
+                        continue
+                    text = line.decode("utf-8", errors="replace").strip()
+                    parsed = _parse_line(text)
+                    if parsed is None:
+                        continue
+                    left_raw, right_raw = parsed
+                    left_raw = _clamp_int(left_raw, -self._raw_max, self._raw_max)
+                    right_raw = _clamp_int(right_raw, -self._raw_max, self._raw_max)
+                    v_l = _map_to_mps(left_raw, self._raw_max, self._max_mps)
+                    v_r = _map_to_mps(right_raw, self._raw_max, self._max_mps)
+                    self._state.update(raw_l=left_raw, raw_r=right_raw, v_l=v_l, v_r=v_r)
+                    now = time.monotonic()
+                    if (self._log_lines or self._log_values) and (
+                        now - self._last_log_t >= 1.0
+                    ):
+                        if self._log_values:
+                            self._log(
+                                f"serial input raw L={left_raw} R={right_raw} -> "
+                                f"v_l={v_l:.3f} v_r={v_r:.3f}"
+                            )
+                        else:
+                            self._log(f"serial input raw L={left_raw} R={right_raw}")
+                        self._last_log_t = now
+                    if self._print_lines:
+                        print(f"[serial] raw L={left_raw} R={right_raw}", flush=True)
+                    if self._print_values:
+                        print(
+                            f"[serial] raw L={left_raw} R={right_raw} -> v_l={v_l:.3f} v_r={v_r:.3f}",
+                            flush=True,
+                        )
+            finally:
+                try:
+                    ser.close()
+                except Exception:
+                    pass
+                self._serial = None
+                if self._stop_event.is_set():
+                    self._log("serial closed")
+                    return
+                self._log("serial disconnected (retrying)")
+                self._stop_event.wait(1.0)
+
+    def close(self) -> None:
+        self._stop_event.set()
+        ser = self._serial
+        if ser is not None:
+            try:
+                ser.close()
+            except Exception:
+                pass
 class ZenohClient:
     def __init__(
         self, *, open_session: Any, robot_id: str, bridge: _Bridge, print_publish: bool
@@ -582,6 +833,12 @@ class MainWindow:
         self._motor_dt_s: deque[float] = deque(maxlen=200)
         self._motor_period_last_print_t = 0.0
         self._print_motor_period = bool(getattr(args, "print_motor_period", False))
+        self._serial_cfg = self._ui_config.serial
+        self._serial_state = SerialState()
+        self._serial_stop = threading.Event()
+        self._serial_thread: Optional[SerialReader] = None
+        self._serial_timeout_s = float(self._serial_cfg.timeout_s)
+        self._serial_enabled = False
 
         class _Win(QMainWindow):
             def __init__(self, owner: "MainWindow"):
@@ -640,6 +897,12 @@ class MainWindow:
         self._lbl_motor = QLabel("v_l=0.000 v_r=0.000")
         self._lbl_motor.setFrameStyle(QFrame.Panel | QFrame.Sunken)
         motor_form.addRow("last cmd", self._lbl_motor)
+        self._lbl_motor_source = QLabel("source=ui")
+        self._lbl_motor_source.setFrameStyle(QFrame.Panel | QFrame.Sunken)
+        motor_form.addRow("input source", self._lbl_motor_source)
+        self._lbl_serial = QLabel("serial: --")
+        self._lbl_serial.setFrameStyle(QFrame.Panel | QFrame.Sunken)
+        motor_form.addRow("serial input", self._lbl_serial)
         self._lbl_motor_period = QLabel("dt=-- avg=--")
         self._lbl_motor_period.setFrameStyle(QFrame.Panel | QFrame.Sunken)
         motor_form.addRow("pub period", self._lbl_motor_period)
@@ -835,6 +1098,9 @@ class MainWindow:
         self._lidar_timer.timeout.connect(self._tick_lidar)
         self._lidar_timer.start(max(10, int(1000.0 / float(self._ui_config.lidar_update_hz))))
 
+        # Serial controller input
+        self._start_serial()
+
         # Open Zenoh now
         try:
             self._client.open()
@@ -853,13 +1119,57 @@ class MainWindow:
         ts = time.strftime("%H:%M:%S")
         self._log.appendPlainText(f"[{ts}] {msg}")
 
+    def _start_serial(self) -> None:
+        cfg = self._serial_cfg
+        if not cfg.enabled:
+            return
+        if not cfg.port:
+            self._append_log("serial enabled but no port configured")
+            return
+
+        self._serial_timeout_s = max(0.05, float(cfg.timeout_s))
+        self._serial_enabled = True
+        self._lbl_serial.setText(f"serial: {cfg.port} @ {cfg.baud}")
+        self._serial_thread = SerialReader(
+            port=cfg.port,
+            baud=int(cfg.baud),
+            raw_max=int(cfg.raw_max),
+            max_mps=float(cfg.max_mps),
+            state=self._serial_state,
+            stop_event=self._serial_stop,
+            log_cb=self._bridge.qobj.log.emit,
+            print_lines=cfg.print_lines,
+            print_values=cfg.print_values,
+        )
+        self._serial_thread.start()
+
+    def _serial_active(self) -> bool:
+        if not self._serial_enabled:
+            return False
+        return self._serial_state.latest(timeout_s=self._serial_timeout_s) is not None
+
+    def _stop_serial(self) -> None:
+        if self._serial_thread is None:
+            return
+        self._serial_stop.set()
+        try:
+            self._serial_thread.close()
+        except Exception:
+            pass
+        try:
+            self._serial_thread.join(timeout=0.5)
+        except Exception:
+            pass
+        self._serial_thread = None
+
     def _event_filter(self, obj: Any, event: Any) -> bool:
         from PySide6.QtWidgets import QApplication, QPlainTextEdit
 
         if event.type() in (self._QEvent.ApplicationDeactivate, self._QEvent.WindowDeactivate):
             if self._pressed:
                 self._pressed.clear()
-                self._send_stop(repeat=2)
+                if not self._serial_active():
+                    self._send_stop(repeat=2)
             return False
 
         if event.type() not in (self._QEvent.KeyPress, self._QEvent.KeyRelease):
@@ -909,7 +1219,8 @@ class MainWindow:
         if event.type() == self._QEvent.KeyRelease and not ev.isAutoRepeat():
             self._pressed.discard(key)
             if not self._pressed:
-                self._send_stop(repeat=2)
+                if not self._serial_active():
+                    self._send_stop(repeat=2)
             return True
         return False
 
@@ -972,10 +1283,24 @@ class MainWindow:
 
         return left, right
 
+    def _resolve_motor_input(self) -> tuple[float, float, str]:
+        if self._serial_enabled:
+            latest = self._serial_state.latest(timeout_s=self._serial_timeout_s)
+            if latest is not None:
+                v_l, v_r, raw_l, raw_r, age_s = latest
+                self._lbl_serial.setText(
+                    f"serial raw L={raw_l:.0f} R={raw_r:.0f} age={age_s*1000.0:.0f}ms"
+                )
+                return v_l, v_r, "serial"
+            self._lbl_serial.setText("serial: waiting")
+        v_l, v_r = self._desired_motor()
+        return v_l, v_r, "ui"
+
     def _tick_motor(self) -> None:
         if self._closing:
             return
-        v_l, v_r = self._desired_motor()
+        v_l, v_r, source = self._resolve_motor_input()
+        self._lbl_motor_source.setText(f"source={source}")
         nonzero = (abs(v_l) > 1e-9) or (abs(v_r) > 1e-9)
         if not nonzero:
             if self._last_nonzero:
@@ -1202,6 +1527,10 @@ class MainWindow:
             # Send multiple zero commands to avoid a final non-zero tick racing the close.
             self._send_stop(repeat=5)
         finally:
+            try:
+                self._stop_serial()
+            except Exception:
+                pass
             try:
                 self._client.close()
             except Exception:
