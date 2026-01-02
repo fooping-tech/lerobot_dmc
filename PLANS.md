@@ -59,7 +59,7 @@
 
 ### Purpose / Big Picture
 
-`remote_zenoh_ui.py` と `serial_motor_bridge.py` の同時起動で `motor/cmd` が競合しないように、UI側でシリアル入力を取り込み、UI入力よりも常にシリアル入力を優先して publish する。
+`remote_zenoh_ui.py` とシリアル入力の同時利用で `motor/cmd` が競合しないように、UI側でシリアル入力を取り込み、UI入力よりも常にシリアル入力を優先して publish する。
 
 ### Plan of Work
 
@@ -72,6 +72,26 @@
 - [x] 設定・依存の追加
 - [x] シリアル統合と優先ロジックの実装
 - [x] ドキュメント更新
+
+
+## ExecPlan: MkDocs Documentation Site
+
+### Purpose / Big Picture
+
+`docs/` にある現行仕様ドキュメントを整理し、MkDocs Material で閲覧できる形にする。
+GitHub Actions により GitHub Pages へ自動デプロイできる状態を作る。
+
+### Plan of Work
+
+1) `docs/` 内の内容を現行仕様に合わせて更新し、インデックス/参照ページを追加する。  
+2) `mkdocs.yml` を追加し、サイト構成（nav）を定義する。  
+3) GitHub Actions でビルド/デプロイできるようにする。
+
+### Progress
+
+- [x] docs の更新とインデックス追加
+- [x] mkdocs.yml 追加
+- [x] GitHub Actions 追加
 
 
 ## Context and Orientation

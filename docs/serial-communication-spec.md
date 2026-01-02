@@ -1,54 +1,56 @@
-# Serial Communication Specification
+# シリアル通信仕様
 
-## Overview
-This controller streams left/right wheel commands to the host over USB serial.
-Each control frame is a single ASCII line and is safe to parse line-by-line.
-On boot, the device starts in calibration mode and does not emit control frames
-until calibration completes.
+この仕様は、以下のコントローラ実装（ファームウェア）を前提とします:
 
-## Transport
-- Interface: USB CDC serial (M5AtomS3 USBSerial)
-- Framing: newline-delimited ASCII lines (`\n`)
-- Baud rate: not configured in firmware (USB CDC); select any baud in the host tool
-  if required by the serial monitor.
+- https://github.com/fooping-tech/DifferentialDriveController
 
-## Message Format
+## 概要
+このコントローラは、USBシリアル経由で左右ホイール指令をホストへ送信します。
+各フレームはASCIIの1行で、行単位で安全にパースできます。
+起動時はキャリブレーションモードに入り、キャリブレーションが完了するまで
+制御フレームは送信されません。
+
+## 伝送
+- インタフェース: USB CDC シリアル（M5AtomS3 USBSerial）
+- フレーミング: 改行区切りのASCII行（`\n`）
+- ボーレート: ファームウェア側では未設定（USB CDC）。シリアルモニタ等が必要な場合は
+  ホスト側で任意の値を指定してください。
+
+## メッセージ形式
 ```
 L:<left>,R:<right>\n
 ```
 
-### Fields
-- `left`: signed integer command for the left wheel
-- `right`: signed integer command for the right wheel
+### フィールド
+- `left`: 左ホイール指令（符号付き整数）
+- `right`: 右ホイール指令（符号付き整数）
 
-### Value Semantics
-- Range: `-1000` to `1000` (normal)
-- Positive: forward
-- Negative: backward
-- Dead zone: values in `-40` to `40` are sent as `0`
-- L button held: left output is doubled and clamped to `-2000` to `2000`
-- R button held: right output is doubled and clamped to `-2000` to `2000`
+### 値の意味
+- 範囲: `-1000` 〜 `1000`（通常）
+- 正: 前進
+- 負: 後進
+- デッドゾーン: `-40` 〜 `40` は `0` として送信
+- Lボタン押下: 左出力が2倍になり、`-2000` 〜 `2000` にクランプ
+- Rボタン押下: 右出力が2倍になり、`-2000` 〜 `2000` にクランプ
 
-### Calibration
-- At startup, the user is prompted to rotate both sticks through their full range.
-- The observed min/max values are used to map raw input to `-1000` to `1000`.
-- After full range is detected, the device waits 0.5 seconds before entering
-  control mode.
-- Pressing the device button returns to calibration mode at any time.
+### キャリブレーション
+- 起動時に両スティックを全範囲で回すよう促されます。
+- 観測した最小/最大値を使って raw 入力を `-1000` 〜 `1000` にマッピングします。
+- 全範囲が検出されると、0.5秒待って制御モードに移行します。
+- デバイスボタンを押すと、いつでもキャリブレーションモードに戻ります。
 
-## Update Rate
-The main loop is paced by a 10 ms timer tick, so the command stream is
-approximately 100 Hz when the device is running normally.
+## 更新レート
+メインループは10msタイマで駆動されるため、通常時のコマンド送信は
+およそ 100 Hz です。
 
-## Examples
+## 例
 ```
 L:0,R:0
 L:250,R:240
 L:-300,R:-310
 ```
 
-## Notes
-- The firmware may print other human-readable status lines during startup; a
-  robust parser should ignore any line that does not start with `L:`.
-- The controller displays the current mode and latest `L`/`R` values on the
-  device screen for quick verification.
+## 注意
+- 起動時に人間向けのステータス行が出る場合があります。`L:` で始まらない行は
+  無視できるパーサを推奨します。
+- コントローラの画面には現在モードと最新の `L/R` 値が表示されます。

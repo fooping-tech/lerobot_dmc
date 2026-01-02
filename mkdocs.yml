@@ -1,0 +1,35 @@
+site_name: LeRobot DMC Docs
+theme:
+  name: material
+  language: ja
+docs_dir: docs
+markdown_extensions:
+  - admonition
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_div_format
+extra_javascript:
+  - https://unpkg.com/mermaid@10.9.5/dist/mermaid.min.js
+  - javascripts/mermaid-init.js
+
+nav:
+  - Home: index.md
+  - 概要・入口:
+      - 概要: overview.md
+      - 構造図: architecture.md
+      - Docs Index: docs_index.md
+      - 参照ファイル: references.md
+  - 運用手順:
+      - GUIテレオペ: remote_ui.md
+      - シリアル入力（運用）: serial_controller.md
+      - LeRobot CLI 利用（EN）: lerobot_dmc_robo_usage.md
+      - Zenoh Pub/Sub（別PC）: zenoh_remote_pubsub.md
+  - 仕様書:
+      - シリアル統合 仕様: serial_controller_software_spec.md
+      - シリアル通信仕様: serial-communication-spec.md
+  - リファレンス:
+      - Keys & Payloads: keys_and_payloads.md
+  - 外部ガイド要約:
+      - LeRobot Own Devices（EN）: lerobot_using_own_devices.md

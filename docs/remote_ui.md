@@ -31,7 +31,7 @@ json5設定ファイルを使う例:
 
 `remote_zenoh_ui.py` は、カレントディレクトリに `config.toml` があれば自動で読み込み、UIの初期値に反映します。
 
-- 例: `config.toml.example` を `config.toml` にコピーして編集
+- 例: リポジトリ直下の `config.toml` を編集
 - 明示的に指定: `--config /path/to/config.toml`
 - 自動読み込みを無効化: `--no-config`
 
@@ -46,6 +46,28 @@ publish しているメッセージをターミナルに出したい場合:
 モータの publish 周期（実測）を確認したい場合:
 
     python packages/lerobot_teleoperator_dmc_robo/lerobot_teleoperator_dmc_robo/remote_zenoh_ui.py --robot-id <ROBOT_ID> --connect "tcp/<ROUTER_IP>:7447" --print-motor-period
+
+## シリアル入力（統合）
+
+シリアルコントローラ入力は UI に統合されています。`config.toml` の `[controller]` を設定すると、
+シリアル入力が UI キー入力より優先されます。
+
+前提となるコントローラ実装（ファームウェア）:
+- https://github.com/fooping-tech/DifferentialDriveController
+
+```
+[controller]
+enabled = true
+serial = "/dev/tty.usbmodemXXXX"
+baud = 115200
+raw_max = 2000
+max_mps = 0.5
+timeout_s = 0.5
+print_lines = false
+print_values = false
+```
+
+UI には `input source` と `serial input` が表示され、シリアルが受信できているかを確認できます。
 
 ## 操作（キーボード）
 

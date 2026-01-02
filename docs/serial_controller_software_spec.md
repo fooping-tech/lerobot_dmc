@@ -3,8 +3,10 @@
 ## 1. 概要
 
 本仕様書は、GUIテレオペレーション（`dmc_robo_teleop`）に統合された
-シリアルコントローラ入力の仕様を定義する。単体ブリッジ
-`serial_motor_bridge.py` は廃止済みであり、本仕様の対象外である。
+シリアルコントローラ入力の仕様を定義する。
+
+前提となるコントローラ実装（ファームウェア）:
+- https://github.com/fooping-tech/DifferentialDriveController
 
 ## 2. スコープ
 

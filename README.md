@@ -1,5 +1,7 @@
 # lerobot_dmc
 
+![lerobot_dmc top](docs/assets/image.png)
+
 Zenoh 経由で `dmc_robo/<robot_id>` デバイスを制御する LeRobot プラグインパッケージ。
 
 このリポジトリには、インストール可能な 2 つのプラグインが含まれます。
@@ -47,6 +49,15 @@ hf auth login
 - 「Add token as git credential?」と聞かれたら `Y` を選び、OS のキーチェーンに保存。
 
 ログイン後、トークンは `~/.cache/huggingface/` に保存され、以後の Hub 操作で再利用されます。
+
+## ドキュメント（MkDocs）
+
+ドキュメントは MkDocs Material で管理しています。
+
+```
+python -m pip install mkdocs-material
+mkdocs serve
+```
 
 ## ロボットのスモークテスト
 

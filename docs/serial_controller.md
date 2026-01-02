@@ -1,7 +1,10 @@
 # Serial Controller (Integrated in GUI)
 
 USBシリアルの `L:<left>,R:<right>` は GUI テレオペ（`dmc_robo_teleop`）に統合されています。
-`serial_motor_bridge.py` の単体ブリッジは廃止しました。
+詳細仕様は `serial_controller_software_spec.md` を参照してください。
+
+前提となるコントローラ実装（ファームウェア）:
+- https://github.com/fooping-tech/DifferentialDriveController
 
 ## セットアップ
 
